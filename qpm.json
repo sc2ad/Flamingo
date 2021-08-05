@@ -1,0 +1,13 @@
+{
+  "sharedDir": "shared",
+  "dependenciesDir": "extern",
+  "info": {
+    "name": "flamingo",
+    "id": "flamingo",
+    "version": "0.1.0",
+    "url": "https://github.com/sc2ad/Flamingo",
+    "additionalData": {}
+  },
+  "dependencies": [],
+  "additionalData": {}
+}
