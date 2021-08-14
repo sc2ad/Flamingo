@@ -11,4 +11,4 @@ An Android inline hooking library with priorities, dynamic trampoline allocation
 - Easily obtain hooks in read-only context for third party API use
 - Avoid dependencies on beatsaber-hook entirely
 - Support trampoline allocations in non-static context, ensure alignment and instruction flushing
-- Make stack happy
+- Make fern happy
