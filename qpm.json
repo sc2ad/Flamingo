@@ -8,6 +8,22 @@
     "url": "https://github.com/sc2ad/Flamingo",
     "additionalData": {}
   },
-  "dependencies": [],
+  "dependencies": [
+    {
+      "id": "capstone",
+      "versionRange": "^0.1.0",
+      "additionalData": {}
+    },
+    {
+      "id": "paper",
+      "versionRange": "^1.0.0",
+      "additionalData": {}
+    },
+    {
+      "id": "modloader",
+      "versionRange": "^1.0.2",
+      "additionalData": {}
+    }
+  ],
   "additionalData": {}
 }

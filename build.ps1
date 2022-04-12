@@ -1,11 +1,38 @@
+
+function Clean-Build-Folder {
+    if (Test-Path -Path "build")
+    {
+        remove-item build -R
+        new-item -Path build -ItemType Directory
+    } else {
+        new-item -Path build -ItemType Directory
+    }
+}
+
 $NDKPath = Get-Content $PSScriptRoot/ndkpath.txt
 
-$buildScript = "$NDKPath/build/ndk-build"
-if (-not ($PSVersionTable.PSEdition -eq "Core")) {
-    $buildScript += ".cmd"
+Clean-Build-Folder
+# build tests
+
+& cmake -G "Ninja" -DCMAKE_BUILD_TYPE="RelWithDebInfo" -DTEST_BUILD=1 -B build
+& cmake --build ./build
+
+$ExitCode = $LastExitCode
+
+
+if (-not ($ExitCode -eq 0)) {
+    $msg = "ExitCode: " + $ExitCode
+    Write-Output $msg
+    exit $ExitCode
 }
 
-& $buildScript NDK_PROJECT_PATH=$PSScriptRoot APP_BUILD_SCRIPT=$PSScriptRoot/Android.mk NDK_APPLICATION_MK=$PSScriptRoot/Application.mk
-if (-not ($LastExitCode -eq 0)) {
-    exit $LastExitCode
-}
+# clean folder
+Clean-Build-Folder
+# build mod
+
+& cmake -G "Ninja" -DCMAKE_BUILD_TYPE="RelWithDebInfo" -B build
+& cmake --build ./build
+
+$ExitCode = $LastExitCode
+
+exit $ExitCode

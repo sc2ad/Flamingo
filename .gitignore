@@ -47,3 +47,13 @@ ndkpath.txt
 # Log files/backups
 *.log
 *.backup
+
+
+libs/
+obj/
+extern/
+qpm.shared.json
+*.backup
+extern.cmake
+qpm_defines.cmake
+build/

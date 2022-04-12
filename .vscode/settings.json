@@ -105,5 +105,25 @@
         "thread": "cpp",
         "simd": "cpp",
         "concepts": "cpp"
-    }
+    },
+    "C_Cpp.errorSquiggles": "Enabled",
+    "C_Cpp.codeAnalysis.clangTidy.checks.enabled": [
+        "*"
+    ],
+    "C_Cpp.codeAnalysis.clangTidy.checks.disabled": [
+        "llvm-include-order",
+        "llvmlibc-*",
+        "fuchsia-*",
+        "modernize-use-trailing-return-type",
+        "readability-avoid-const-params-in-decls",
+        "cppcoreguidelines-macro-usage"
+    ],
+    "C_Cpp.default.cppStandard": "c++20",
+    "C_Cpp.default.cStandard": "c17",
+    "C_Cpp.loggingLevel": "Debug",
+    "C_Cpp.vcFormat.newLine.beforeElse": false,
+    "C_Cpp.vcFormat.newLine.beforeOpenBrace.function": "sameLine",
+    "C_Cpp.vcFormat.newLine.beforeOpenBrace.block": "sameLine",
+    "C_Cpp.vcFormat.newLine.closeBraceSameLine.emptyType": true,
+    "C_Cpp.codeAnalysis.clangTidy.enabled": true
 }
