@@ -14,6 +14,8 @@ set(INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # compile options used
 add_compile_options(-frtti -fPIE -fPIC -fexceptions)
+add_compile_definitions(MOD_VERSION=\"${MOD_VERSION}\")
+add_compile_definitions(MOD_ID=\"${MOD_ID}\")
 # add_compile_options(-Wall -Wextra -Werror -Wpedantic)
 # compile definitions used
 

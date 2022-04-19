@@ -11,7 +11,7 @@ function Clean-Build-Folder {
 
 $NDKPath = Get-Content $PSScriptRoot/ndkpath.txt
 
-Clean-Build-Folder
+# Clean-Build-Folder
 # build tests
 
 & cmake -G "Ninja" -DCMAKE_BUILD_TYPE="RelWithDebInfo" -DTEST_BUILD=1 -B build
@@ -34,5 +34,10 @@ Clean-Build-Folder
 & cmake --build ./build
 
 $ExitCode = $LastExitCode
+
+# Post build, we actually want to transform the compile_commands.json file such that it has no \\ characters and ONLY has / characters
+(Get-Content -Path build/compile_commands.json) |
+    ForEach-Object {$_ -Replace '\\\\', '/'} | Set-Content -Path build/compile_commands.json
+
 
 exit $ExitCode

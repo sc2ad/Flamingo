@@ -6,7 +6,9 @@
     "id": "flamingo",
     "version": "0.1.0",
     "url": "https://github.com/sc2ad/Flamingo",
-    "additionalData": {}
+    "additionalData": {
+      "overrideSoName": "libflamingo.so"
+    }
   },
   "dependencies": [
     {
@@ -22,6 +24,11 @@
     {
       "id": "modloader",
       "versionRange": "^1.0.2",
+      "additionalData": {}
+    },
+    {
+      "id": "beatsaber-hook",
+      "versionRange": "^3.8.0",
       "additionalData": {}
     }
   ],
