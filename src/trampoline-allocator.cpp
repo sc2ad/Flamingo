@@ -37,25 +37,26 @@ void Trampoline::Write(void const* ptr) {
 }
 
 void Trampoline::WriteB(int64_t imm) {
+    // https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/B--Branch-
     WriteCallback(reinterpret_cast<uint32_t*>(imm));
 }
 
 void Trampoline::WriteBl(int64_t imm) {
-    constexpr uint32_t bl_opcode = 0b10010100000000000000000000000000U;
-    constexpr uint32_t branch_imm_mask = 0b00000011111111111111111111111111U;
+    // https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/BL--Branch-with-Link-
+    constexpr static uint32_t branch_imm_mask = 0b00000011111111111111111111111111U;
     int64_t pc = reinterpret_cast<int64_t>(address + instruction_count);
     int64_t delta = pc - imm;
     if (std::llabs(delta) > (branch_imm_mask << 1) + 1) {
         // Too far to emit a b. Emit a br instead.
         // We cannot emit a blr here because the pc + 4 for return will be in our offset.
         // LDR X17, #12
-        constexpr uint32_t ldr_x17 = 0x58000071U;
+        constexpr static uint32_t ldr_x17 = 0x58000071U;
         Write(ldr_x17);
         // ADR X30, #16
-        constexpr uint32_t adr_x30 = 0x1000009EU;
+        constexpr static uint32_t adr_x30 = 0x1000009EU;
         Write(adr_x30);
         // BR x17
-        constexpr uint32_t br_x17 = 0xD61F0220U;
+        constexpr static uint32_t br_x17 = 0xD61F0220U;
         Write(br_x17);
         // Data
         Write(reinterpret_cast<void*>(imm));
@@ -63,12 +64,85 @@ void Trampoline::WriteBl(int64_t imm) {
         // Small enough to emit a b/bl.
         // bl opcode | encoded immediate (delta >> 2)
         // Note, abs(delta >> 2) must be < (1 << 26)
+        constexpr static uint32_t bl_opcode = 0b10010100000000000000000000000000U;
         Write(bl_opcode | ((delta >> 2) & branch_imm_mask));
     }
 }
 
-auto get_immediate(cs_insn const& inst) {
+void Trampoline::WriteAdr(uint8_t reg, int64_t imm) {
+    // https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/ADR--Form-PC-relative-address-?lang=en
+    constexpr static uint32_t adr_maximum_imm = 0b00000000000111111111111111111111U;
+    constexpr static uint32_t reg_mask = 0b11111;
+    int64_t pc = reinterpret_cast<int64_t>(address + instruction_count);
+    int64_t delta = pc - imm;
+    if (std::llabs(delta) >= (adr_maximum_imm >> 1)) {
+        // Too far to emit just an adr.
+        // LDR (used register), #0x8
+        constexpr static uint32_t ldr_mask = 0b01011000000000000000000000000000U;
+        // https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/LDR--literal---Load-Register--literal--
+        // imm is encoded as << 2, LSB just to the right of reg
+        constexpr static uint32_t ldr_imm = (8U >> 2U) << 5;
+        Write(ldr_mask | ldr_imm | (reg_mask & reg));
+        // B #0xC
+        constexpr static uint32_t b_0xc = 0x14000003U;
+        Write(b_0xc);
+        // Immediate data
+        Write(reinterpret_cast<void*>(imm));
+    } else {
+        // Close enough to emit an adr.
+        // Note that delta should be within +-1 MB
+        constexpr static uint32_t adr_opcode = 0b00010000000000000000000000000000;
+        // Get immlo
+        uint32_t imm_lo = ((static_cast<uint32_t>(delta) & 3) << 29);
+        // Get immhi
+        uint32_t imm_hi = (static_cast<uint32_t>(delta) >> 2) << 5;
+        Write(adr_opcode | imm_lo | imm_hi | (reg_mask & reg));
+    }
+}
+
+void Trampoline::WriteAdrp(uint8_t reg, int64_t imm) {
+    // https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/ADR--Form-PC-relative-address-?lang=en
+    // constexpr static uint32_t adr_maximum_imm = 0b00000000000111111111111111111111U;
+    constexpr static uint32_t reg_mask = 0b11111;
+    constexpr static uint32_t pc_imm_mask = ~0b111111111111;
+    constexpr static int64_t adrp_maximum_imm = 0xFFFFF000U;
+    int64_t pc = reinterpret_cast<int64_t>(address + instruction_count);
+    int64_t delta = (pc & pc_imm_mask) - imm;
+    if (std::llabs(delta) >= adrp_maximum_imm) {
+        // Too far to emit just an adr.
+        // LDR (used register), #0x8
+        constexpr static uint32_t ldr_mask = 0b01011000000000000000000000000000U;
+        // https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/LDR--literal---Load-Register--literal--
+        // imm is encoded as << 2, LSB just to the right of reg
+        constexpr static uint32_t ldr_imm = (8U >> 2U) << 5;
+        Write(ldr_mask | ldr_imm | (reg_mask & reg));
+        // B #0xC
+        constexpr static uint32_t b_0xc = 0x14000003U;
+        Write(b_0xc);
+        // Immediate data
+        Write(reinterpret_cast<void*>(imm));
+    } else {
+        // Close enough to emit an adrp.
+        // Note that delta should be within +-4 GB
+        constexpr static uint32_t adrp_opcode = 0b10010000000000000000000000000000;
+        // Imm is << 12 in parse of instruction
+        delta >>= 12;
+        // Get immlo
+        uint32_t imm_lo = ((static_cast<uint32_t>(delta) & 3) << 29);
+        // Get immhi
+        uint32_t imm_hi = (static_cast<uint32_t>(delta) >> 2) << 5;
+        Write(adrp_opcode | imm_lo | imm_hi | (reg_mask & reg));
+    }
+}
+
+auto get_branch_immediate(cs_insn const& inst) {
     return inst.detail->arm64.operands[0].imm;
+}
+
+std::pair<uint8_t, int64_t> get_second_immediate(cs_insn const& inst) {
+    // register is just bottom 5 bits
+    constexpr static uint32_t reg_mask = 0b11111;
+    return {*reinterpret_cast<uint32_t const*>(inst.bytes) & reg_mask, inst.detail->arm64.operands[1].imm};
 }
 
 void Trampoline::WriteFixup(uint32_t const* target) {
@@ -88,14 +162,14 @@ void Trampoline::WriteFixup(uint32_t const* target) {
             if (inst.detail->arm64.cc != ARM64_CC_INVALID) {
                 // TODO: Handle this like a conditional branch
             } else {
-                auto dst = get_immediate(inst);
+                auto dst = get_branch_immediate(inst);
                 WriteB(dst);
             }
         }
         break;
         case ARM64_INS_BL:
         {
-            auto dst = get_immediate(inst);
+            auto dst = get_branch_immediate(inst);
             WriteBl(dst);
         }
         break;
@@ -116,7 +190,17 @@ void Trampoline::WriteFixup(uint32_t const* target) {
 
         // Handle pc-relative loads
         case ARM64_INS_ADR:
+        {
+            auto [reg, dst] = get_second_immediate(inst);
+            WriteAdr(reg, dst);
+        }
+        break;
         case ARM64_INS_ADRP:
+        {
+            auto [reg, dst] = get_second_immediate(inst);
+            WriteAdrp(reg, dst);
+        }
+        break;
 
         // Otherwise, just write the instruction verbatim
         default:
@@ -127,17 +211,16 @@ void Trampoline::WriteFixup(uint32_t const* target) {
 }
 
 void Trampoline::WriteCallback(uint32_t const* target) {
-    constexpr uint32_t b_opcode = 0b00010100000000000000000000000000U;
-    constexpr uint32_t branch_imm_mask = 0b00000011111111111111111111111111U;
+    constexpr static uint32_t branch_imm_mask = 0b00000011111111111111111111111111U;
     int64_t pc = reinterpret_cast<int64_t>(address + instruction_count);
     int64_t delta = pc - reinterpret_cast<int64_t>(target);
     if (std::llabs(delta) > (branch_imm_mask << 1) + 1) {
         // To far for b. Emit a br instead.
         // LDR x17, 0x8
-        constexpr uint32_t ldr_x17 = 0x58000051U;
+        constexpr static uint32_t ldr_x17 = 0x58000051U;
         Write(ldr_x17);
         // BR x17
-        constexpr uint32_t br_x17 = 0xD61F0220U;
+        constexpr static uint32_t br_x17 = 0xD61F0220U;
         Write(br_x17);
         // Data
         Write(target);
@@ -145,6 +228,7 @@ void Trampoline::WriteCallback(uint32_t const* target) {
         // Small enough to emit a b/bl.
         // b opcode | encoded immediate (delta >> 2)
         // Note, abs(delta >> 2) must be < (1 << 26)
+        constexpr static uint32_t b_opcode = 0b00010100000000000000000000000000U;
         Write(b_opcode | ((delta >> 2) & branch_imm_mask));
     }
 }
@@ -171,7 +255,7 @@ struct PageType {
 };
 
 std::list<PageType> pages;
-constexpr std::size_t PageSize = 4096;
+constexpr static std::size_t PageSize = 4096;
 
 Trampoline TrampolineAllocator::Allocate(std::size_t trampolineSize) {
     // Allocation should work by grabbing a full page at a time

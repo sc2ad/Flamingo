@@ -24,6 +24,9 @@ struct Trampoline {
     void WriteCallback(uint32_t const* target);
     void WriteB(int64_t imm);
     void WriteBl(int64_t imm);
+    void WriteAdr(uint8_t reg, int64_t imm);
+    void WriteAdrp(uint8_t reg, int64_t imm);
+    
     void WriteFixup(uint32_t const* target);
     void WriteFixups(uint32_t const* target, uint16_t fixupSize);
     /// @brief A TRAMPOLINE IS NOT COMPLETE UNTIL FINISH IS CALLED!

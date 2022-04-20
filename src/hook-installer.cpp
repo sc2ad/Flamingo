@@ -18,6 +18,8 @@ void HookInstaller::CreateAdjacencyMap() {
             for (auto [target2, hook2] : collected_hooks) {
                 if (hook2.method_size > MinimumMethodSize + LeapfrogSize) {
                     // Space for a POTENTIAL leapfrog hook
+                    // Need to make sure it's actually within an acceptable range, of course
+                    // Nested leapfrogs may also need to apply
                     // Log additions here
                     lst_pair.first->second.push_back(target2);
                 }
