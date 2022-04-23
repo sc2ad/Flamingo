@@ -26,7 +26,12 @@ struct Trampoline {
     void WriteBl(int64_t imm);
     void WriteAdr(uint8_t reg, int64_t imm);
     void WriteAdrp(uint8_t reg, int64_t imm);
-    
+
+    /// @brief Helper function to write:
+    /// LDR x17, #0x8
+    /// BR X17
+    /// DATA
+    void WriteLdrBrData(uint32_t const* target);
     void WriteFixup(uint32_t const* target);
     void WriteFixups(uint32_t const* target, uint16_t fixupSize);
     /// @brief A TRAMPOLINE IS NOT COMPLETE UNTIL FINISH IS CALLED!

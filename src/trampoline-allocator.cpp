@@ -85,7 +85,8 @@ void Trampoline::WriteAdr(uint8_t reg, int64_t imm) {
         Write(ldr_mask | ldr_imm | (reg_mask & reg));
         // B #0xC
         constexpr static uint32_t b_0xc = 0x14000003U;
-        Write(b_0xc);
+        static_assert(b_0xc == get_b(0xC));
+        Write(get_b(0xC));
         // Immediate data
         Write(reinterpret_cast<void*>(imm));
     } else {
@@ -118,7 +119,10 @@ void Trampoline::WriteAdrp(uint8_t reg, int64_t imm) {
         Write(ldr_mask | ldr_imm | (reg_mask & reg));
         // B #0xC
         constexpr static uint32_t b_0xc = 0x14000003U;
-        Write(b_0xc);
+        // TODO: Remove this assertion
+        static_assert(b_0xc == get_b(0xC));
+        Write(get_b(0xC));
+        // Write(b_0xc);
         // Immediate data
         Write(reinterpret_cast<void*>(imm));
     } else {
@@ -135,13 +139,63 @@ void Trampoline::WriteAdrp(uint8_t reg, int64_t imm) {
     }
 }
 
+template<bool imm_19>
+void WriteCondBranch(Trampoline& value, uint32_t instruction, int64_t imm) {
+    if constexpr (imm_19) {
+        // Imm 19
+        constexpr static uint32_t imm_mask = 0b00000000111111111111111111100000;
+    } else {
+        // Imm 14
+        constexpr static uint32_t imm_mask = 0b00000000000001111111111111100000;
+    }
+    int64_t pc = reinterpret_cast<int64_t>(value.address + value.instruction_count);
+    int64_t delta = pc - imm;
+    // imm_mask >> 1 for maximum positive value
+    // << 2 because branch imms are << 2
+    // >> 5 because the mask is too high
+    if (llabs(delta) < (imm_mask >> 4)) {
+        // Small enough to optimize, just write the instruction
+        // But with the modified offset
+        // Delta should be >> 2 for branch imm
+        // Then << 5 to be in the correct location
+        value.Write((instruction & ~imm_mask) | (((delta >> 2) << 5) & imm_mask));
+    } else {
+        // Otherwise, we need to write the same expression but with a known offset
+        // Specifically, write the instruction but with an offset of 8
+        // 2, because 8 >> 2 is 2
+        // << 5 to place in correct location for immediate
+        value.Write((instruction & ~imm_mask) | (2 << 5) & imm_mask);
+        value.Write(get_b(0x14));
+        value.WriteLdrBrData(reinterpret_cast<uint32_t*>(imm));
+    }
+}
+
+void Trampoline::WriteLdrBrData(uint32_t const* target) {
+    // LDR x17, 0x8
+    constexpr static uint32_t ldr_x17 = 0x58000051U;
+    Write(ldr_x17);
+    // BR x17
+    constexpr static uint32_t br_x17 = 0xD61F0220U;
+    Write(br_x17);
+    // Data
+    Write(target);
+}
+
+/// @brief Helper function that returns an encoded b for a particular offset
+consteval uint32_t get_b(int64_t offset) {
+    constexpr uint32_t b_opcode = 0b00010100000000000000000000000000U;
+    return (b_opcode | (offset >> 2));
+}
+
 auto get_branch_immediate(cs_insn const& inst) {
+    assert(inst.detail->arm64.op_count == 1);
     return inst.detail->arm64.operands[0].imm;
 }
 
 std::pair<uint8_t, int64_t> get_second_immediate(cs_insn const& inst) {
     // register is just bottom 5 bits
     constexpr static uint32_t reg_mask = 0b11111;
+    assert(inst.detail->arm64.op_count == 2);
     return {*reinterpret_cast<uint32_t const*>(inst.bytes) & reg_mask, inst.detail->arm64.operands[1].imm};
 }
 
@@ -161,6 +215,8 @@ void Trampoline::WriteFixup(uint32_t const* target) {
         {
             if (inst.detail->arm64.cc != ARM64_CC_INVALID) {
                 // TODO: Handle this like a conditional branch
+                auto dst = get_branch_immediate(inst);
+                WriteCondBranch<true>(*this, *target, dst);
             } else {
                 auto dst = get_branch_immediate(inst);
                 WriteB(dst);
@@ -177,15 +233,21 @@ void Trampoline::WriteFixup(uint32_t const* target) {
         // Handle fixups for conditional branches
         case ARM64_INS_CBNZ:
         case ARM64_INS_CBZ:
+        {
+            auto [reg, dst] = get_second_immediate(inst);
+            WriteCondBranch<true>(*this, *target, dst);
+        }
+        break;
         case ARM64_INS_TBNZ:
         case ARM64_INS_TBZ:
+        {
+            auto [reg, dst] = get_second_immediate(inst);
+            WriteCondBranch<false>(*this, *target, dst);
+        }
+        break;
 
-        // Handle fixups for load
+        // Handle fixups for load literals
         case ARM64_INS_LDR:
-        case ARM64_INS_LDRB:
-        case ARM64_INS_LDRH:
-        case ARM64_INS_LDRSB:
-        case ARM64_INS_LDRSH:
         case ARM64_INS_LDRSW:
 
         // Handle pc-relative loads
@@ -216,14 +278,7 @@ void Trampoline::WriteCallback(uint32_t const* target) {
     int64_t delta = pc - reinterpret_cast<int64_t>(target);
     if (std::llabs(delta) > (branch_imm_mask << 1) + 1) {
         // To far for b. Emit a br instead.
-        // LDR x17, 0x8
-        constexpr static uint32_t ldr_x17 = 0x58000051U;
-        Write(ldr_x17);
-        // BR x17
-        constexpr static uint32_t br_x17 = 0xD61F0220U;
-        Write(br_x17);
-        // Data
-        Write(target);
+        WriteLdrBrData(target);
     } else {
         // Small enough to emit a b/bl.
         // b opcode | encoded immediate (delta >> 2)
