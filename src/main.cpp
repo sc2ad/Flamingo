@@ -1,5 +1,6 @@
 // On dlopen, we should basically just construct our vectors and everything else
 // As well as our analytics data
+#include "logger.hpp"
 #include "more_stuff.hpp"
 #include "hook-installer.hpp"
 // #include "hook-installer.hpp"
@@ -17,7 +18,8 @@ namespace {
     template<> \
     struct ErrorReporter<Type, Type::Value> { \
         static void ReportError(Type value, HookTargetInstallation& existing, HookData& incoming) { \
-            if ((static_cast<int>(value) & static_cast<int>(Type::Value)) != 0) { \
+            if ((static_cast<int>(value) & static_cast<int>(Type::Value)) != 0) {                   \
+                Paper::Logger::fmtLog<Paper::LogLevel::ERR>("Error registering hook! Error: {}", msg);                           \
                 /* TODO: printf("Error registering hook! Error: " msg "\n"); */ \
             } \
         } \
@@ -46,6 +48,7 @@ void HookData::RegisterHook(HookData&& data) {
 }
 
 extern "C" void load() {
+    Paper::Logger::RegisterFileContextId(flamingo::Logger.tag);
     // Here's where we will INSTALL all of our hooks!
     HookInstaller::CollectHooks();
     #ifndef FLAMINGO_NO_LEAPFROG

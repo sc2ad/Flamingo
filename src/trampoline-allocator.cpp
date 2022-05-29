@@ -1,7 +1,8 @@
+#include "logger.hpp"
 #include "trampoline-allocator.hpp"
 #include <list>
 #include <sys/mman.h>
-#include <stdlib.h>
+#include <cstdlib>
 #include "beatsaber-hook/shared/utils/utils-functions.h"
 
 #ifdef ID
@@ -24,6 +25,7 @@
 
 void Trampoline::Write(uint32_t instruction) {
     assert((instruction_count + 1) * sizeof(uint32_t) <= alloc_size);
+    flamingo::Logger.fmtLog<Paper::LogLevel::DBG>("Trampoline writing instruction {} count {} instruction {}", fmt::ptr(address), instruction_count, instruction);
     // Log what we are writing (and also our state)
     *(address + instruction_count) = instruction;
     instruction_count++;
@@ -32,6 +34,8 @@ void Trampoline::Write(uint32_t instruction) {
 void Trampoline::Write(void const* ptr) {
     assert(instruction_count * sizeof(uint32_t) + sizeof(void*) <= alloc_size);
     // Log what we are writing (and also our state)
+    flamingo::Logger.fmtLog<Paper::LogLevel::DBG>("Trampoline writing pointer instruction {} count {} instruction {}", fmt::ptr(address), instruction_count, instruction);
+
     *reinterpret_cast<void**>(address + instruction_count) = const_cast<void*>(ptr);
     instruction_count += sizeof(void*) / sizeof(uint32_t);
 }
@@ -333,11 +337,13 @@ Trampoline TrampolineAllocator::Allocate(std::size_t trampolineSize) {
     void* ptr;
     if (!::posix_memalign(&ptr, PageSize, PageSize)) {
         // Log error on memalign allocation!
+        flamingo::Logger.fmtLog<Paper::LogLevel::INF>("Failed to allocate trampoline page of size: {} for size: {}", PageSize, trampolineSize);
         SAFE_ABORT_MSG("Failed to allocate trampoline page of size: %zu for size: %zu", PageSize, trampolineSize);
     }
     // Mark full page as rxw
     if (!::mprotect(ptr, PageSize, PROT_READ | PROT_WRITE | PROT_EXEC)) {
         // Log error on mprotect!
+        flamingo::Logger.fmtLog<Paper::LogLevel::INF>("Failed to mark allocated page at: {} as +rwx!", fmt::ptr(ptr));
         SAFE_ABORT_MSG("Failed to mark allocated page at: %p as +rwx!", ptr);
     }
     auto& page = pages.emplace_back(ptr, trampolineSize);
@@ -358,6 +364,7 @@ void TrampolineAllocator::Free(Trampoline const& toFree) {
             if (p.trampoline_count == 0) {
                 if (!::mprotect(p.ptr, PageSize, PROT_READ)) {
                     // Log error on mprotect
+                    flamingo::Logger.fmtLog<Paper::LogLevel::INF>("Failed to mark page at: {} as read only!", fmt::ptr(p.ptr));
                     SAFE_ABORT_MSG("Failed to mark page at: %p as read only!", p.ptr);
                 }
                 ::free(p.ptr);
