@@ -34,7 +34,7 @@ void Trampoline::Write(uint32_t instruction) {
 void Trampoline::Write(void const* ptr) {
     assert(instruction_count * sizeof(uint32_t) + sizeof(void*) <= alloc_size);
     // Log what we are writing (and also our state)
-    flamingo::Logger.fmtLog<Paper::LogLevel::DBG>("Trampoline writing pointer instruction {} count {} instruction {}", fmt::ptr(address), instruction_count, instruction);
+    flamingo::Logger.fmtLog<Paper::LogLevel::DBG>("Trampoline writing pointer instruction {} count {} ptr {}", fmt::ptr(address), instruction_count, fmt::ptr(ptr));
 
     *reinterpret_cast<void**>(address + instruction_count) = const_cast<void*>(ptr);
     instruction_count += sizeof(void*) / sizeof(uint32_t);
