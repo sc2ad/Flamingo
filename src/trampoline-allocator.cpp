@@ -1,7 +1,7 @@
 #include "trampoline-allocator.hpp"
 #include <list>
 #include <sys/mman.h>
-#include <stdlib.h>
+#include <cstdlib>
 #include "beatsaber-hook/shared/utils/utils-functions.h"
 
 #ifdef ID
@@ -21,6 +21,23 @@
 #ifdef __VERSION_BKP
 #define VERSION __VERSION_BKP
 #endif
+
+// TODO: We should consider an optimization where we have a location for fixup data instead of inling all fixups.
+// This would allow us to write out actual assembly verbatim and then have ldrs and whatnot for grabbing the data
+// This would save a few instructions per all of the fixups, since we wouldn't need to branch over the data
+// In addition, it would allow us to have a better time disassembling.
+// It also shouldn't cost us any space whatsoever
+// Though, if we perform any hooks AFTER the fact, we would need to properly expand both our data and our instruction space
+// and THAT could be somewhat tricky.
+// Perhaps a full recompile for a hook is actually preferred, though, if we know we need to leapfrog
+// Since we would need to expand our trampoline and our original instructions regardless.
+// TODO: Consider a full recompile and permit late installations
+
+/// @brief Helper function that returns an encoded b for a particular offset
+consteval uint32_t get_b(int offset) {
+    constexpr uint32_t b_opcode = 0b00010100000000000000000000000000U;
+    return (b_opcode | (offset >> 2));
+}
 
 void Trampoline::Write(uint32_t instruction) {
     assert((instruction_count + 1) * sizeof(uint32_t) <= alloc_size);
@@ -141,12 +158,15 @@ void Trampoline::WriteAdrp(uint8_t reg, int64_t imm) {
 
 template<bool imm_19>
 void WriteCondBranch(Trampoline& value, uint32_t instruction, int64_t imm) {
+    uint32_t imm_mask;
     if constexpr (imm_19) {
         // Imm 19
-        constexpr static uint32_t imm_mask = 0b00000000111111111111111111100000;
+        constexpr static uint32_t imm_mask_19 = 0b00000000111111111111111111100000;
+        imm_mask = imm_mask_19;
     } else {
         // Imm 14
-        constexpr static uint32_t imm_mask = 0b00000000000001111111111111100000;
+        constexpr static uint32_t imm_mask_14 = 0b00000000000001111111111111100000;
+        imm_mask = imm_mask_14;
     }
     int64_t pc = reinterpret_cast<int64_t>(value.address + value.instruction_count);
     int64_t delta = pc - imm;
@@ -181,12 +201,6 @@ void Trampoline::WriteLdrBrData(uint32_t const* target) {
     Write(target);
 }
 
-/// @brief Helper function that returns an encoded b for a particular offset
-consteval uint32_t get_b(int64_t offset) {
-    constexpr uint32_t b_opcode = 0b00010100000000000000000000000000U;
-    return (b_opcode | (offset >> 2));
-}
-
 auto get_branch_immediate(cs_insn const& inst) {
     assert(inst.detail->arm64.op_count == 1);
     return inst.detail->arm64.operands[0].imm;
@@ -203,7 +217,7 @@ void Trampoline::WriteFixup(uint32_t const* target) {
     // Target is where we want to grab original instruction from
     // Log everything we do here
     original_instructions.push_back(*target);
-    cs_insn* insns;
+    cs_insn* insns = nullptr;
     auto count = cs_disasm(cs::getHandle(), reinterpret_cast<uint8_t const*>(target), sizeof(uint32_t), reinterpret_cast<uint64_t>(target), 1, &insns);
     assert(count == 1);
     auto inst = insns[0];
@@ -248,7 +262,23 @@ void Trampoline::WriteFixup(uint32_t const* target) {
 
         // Handle fixups for load literals
         case ARM64_INS_LDR:
+        {
+            // TODO: Finish this fixup
+            constexpr static uint32_t b_31 = 0b10000000000000000000000000000000;
+            constexpr static uint32_t ldr_lit_opc_mask = 0b10111111000000000000000000000000;
+            if ((*target & ldr_lit_opc_mask) == 0b00011000000000000000000000000000) {
+                // This is an ldr literal
+                // https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/LDR--literal---Load-Register--literal--
+                auto [reg, dst] = get_second_immediate(inst);
+            } else if ((*target & (ldr_lit_opc_mask & ~b_31)) == 0b00011100000000000000000000000000000) {
+                // This is an ldr literal, SIMD
+                // https://developer.arm.com/documentation/ddi0596/2021-12/SIMD-FP-Instructions/LDR--literal--SIMD-FP---Load-SIMD-FP-Register--PC-relative-literal--
+                auto [reg, dst] = get_second_immediate(inst);
+                
+            }
+        }
         case ARM64_INS_LDRSW:
+        // TODO: Handle this fixup
 
         // Handle pc-relative loads
         case ARM64_INS_ADR:
@@ -274,8 +304,8 @@ void Trampoline::WriteFixup(uint32_t const* target) {
 
 void Trampoline::WriteCallback(uint32_t const* target) {
     constexpr static uint32_t branch_imm_mask = 0b00000011111111111111111111111111U;
-    int64_t pc = reinterpret_cast<int64_t>(address + instruction_count);
-    int64_t delta = pc - reinterpret_cast<int64_t>(target);
+    auto pc = reinterpret_cast<int64_t>(address + instruction_count);
+    auto delta = pc - reinterpret_cast<int64_t>(target);
     if (std::llabs(delta) > (branch_imm_mask << 1) + 1) {
         // To far for b. Emit a br instead.
         WriteLdrBrData(target);
@@ -299,6 +329,12 @@ void Trampoline::WriteFixups(uint32_t const* target, uint16_t countToFixup) {
 
 void Trampoline::Finish() {
     pageSizeRef -= alloc_size - (instruction_count * sizeof(uint32_t));
+}
+
+void Trampoline::Log() {
+    // TODO: Log the trampoline and various information here
+    // This will probably be necessary given the potential for failure
+
 }
 
 struct PageType {
@@ -356,7 +392,7 @@ void TrampolineAllocator::Free(Trampoline const& toFree) {
         if (p.ptr == page_addr) {
             p.trampoline_count--;
             if (p.trampoline_count == 0) {
-                if (!::mprotect(p.ptr, PageSize, PROT_READ)) {
+                if (::mprotect(p.ptr, PageSize, PROT_READ) != 0) {
                     // Log error on mprotect
                     SAFE_ABORT_MSG("Failed to mark page at: %p as read only!", p.ptr);
                 }

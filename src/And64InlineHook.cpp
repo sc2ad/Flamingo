@@ -53,7 +53,7 @@ struct context
         uint32_t *bp;
         uint32_t  ls; // left-shift counts
         uint32_t  ad; // & operand
-    } __attribute__((aligned(16)));
+    };
     struct insns_info
     {
         union

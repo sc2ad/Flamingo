@@ -20,7 +20,7 @@ struct Trampoline {
     Trampoline(uint32_t* ptr, std::size_t allocationSize, std::size_t& sz) : address(ptr), alloc_size(allocationSize), pageSizeRef(sz) {}
 
     void Write(uint32_t instruction);
-    void Write(void const* address);
+    void Write(void const* ptr);
     void WriteCallback(uint32_t const* target);
     void WriteB(int64_t imm);
     void WriteBl(int64_t imm);
@@ -33,7 +33,9 @@ struct Trampoline {
     /// DATA
     void WriteLdrBrData(uint32_t const* target);
     void WriteFixup(uint32_t const* target);
-    void WriteFixups(uint32_t const* target, uint16_t fixupSize);
+    void WriteFixups(uint32_t const* target, uint16_t countToFixup);
+    /// @brief Logs various information about the trampoline.
+    void Log();
     /// @brief A TRAMPOLINE IS NOT COMPLETE UNTIL FINISH IS CALLED!
     void Finish();
 };
