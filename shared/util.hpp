@@ -1,28 +1,39 @@
 #pragma once
-#include <type_traits>
+#include <cassert>
 
-// https://en.cppreference.com/w/cpp/experimental/make_array
-namespace details {
-    template<class> struct is_ref_wrapper : std::false_type {};
-    template<class T> struct is_ref_wrapper<std::reference_wrapper<T>> : std::true_type {};
-    
-    template<class T>
-    using not_ref_wrapper = std::negation<is_ref_wrapper<std::decay_t<T>>>;
-    
-    template<class D, class...>
-    struct return_type_helper {
-        using type = D;
-    };
-    template<class... Types>
-    struct return_type_helper<void, Types...> : std::common_type<Types...> {
-        static_assert(std::conjunction_v<not_ref_wrapper<Types>...>, "Types cannot contain reference_wrappers when D is void");
-    };
-    
-    template <class D, class... Types>
-    using return_type = std::array<typename return_type_helper<D, Types...>::type, sizeof...(Types)>;
-}
- 
-template<class D = void, class... Types>
-constexpr details::return_type<D, Types...> make_array(Types&&... t) {
-    return {std::forward<Types>(t)... };
-}
+#ifdef ANDROID
+#include "beatsaber-hook/shared/utils/utils-functions.h"
+#include "paper/shared/logger.hpp"
+
+#ifndef NDEBUG
+#define FLAMINGO_ASSERT(...) assert(__VA_ARGS__)
+#define FLAMINGO_DEBUG(...) Paper::Logger::fmtLog<Paper::LogLevel::DBG>(__VA_ARGS__)
+#else
+#define FLAMINGO_ASSERT(...) __builtin_assume(__VA_ARGS__)
+#define FLAMINGO_DEBUG(...)
+#endif
+
+#define FLAMINGO_CRITICAL(...) Paper::Logger::fmtLog<Paper::LogLevel::CRIT>(__VA_ARGS__)
+#define FLAMINGO_ABORT(...)            \
+    do {                               \
+        SAFE_ABORT_MSG(__VA_ARGS__);   \
+        Paper::Logger::WaitForFlush(); \
+    } while (0)
+
+#else
+#include <fmt/core.h>
+#include <cstddef>
+#include <cstdio>
+
+#define FLAMINGO_ASSERT(...) assert(__VA_ARGS__)
+#define FLAMINGO_DEBUG(...)  \
+    fmt::print(__VA_ARGS__); \
+    puts("")
+#define FLAMINGO_CRITICAL(...) \
+    fmt::print(__VA_ARGS__);   \
+    puts("")
+#define FLAMINGO_ABORT(...)  \
+    fmt::print(__VA_ARGS__); \
+    puts("");                \
+    std::abort()
+#endif
