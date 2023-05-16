@@ -1,0 +1,11 @@
+Checks: '*,-llvm*,
+  -google-readability-namespace,
+  -llvmlib,
+  -fuchsi,
+  -alter,
+  -modernize-use-trailing-return,
+  -readability-avoid-const-params-in,
+  -cppcoreguidelines-macro-usage,
+  -readability-identifier-length,
+  -google-readability-todo'
+FormatStyle:     file

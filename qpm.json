@@ -30,7 +30,12 @@
       "id": "beatsaber-hook",
       "versionRange": "^3.8.0",
       "additionalData": {}
+    },
+    {
+      "id": "paper",
+      "versionRange": "^1.2.9",
+      "additionalData": {}
     }
   ],
-  "additionalData": {}
+  "workspace": null
 }
