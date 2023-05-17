@@ -222,7 +222,7 @@ void WriteCondBranch(Trampoline& value, uint32_t instruction, int64_t imm) {
         // But with the modified offset
         // Delta should be >> 2 for branch imm
         // Then << 5 to be in the correct location
-        value.Write((instruction & ~imm_mask) | (((delta >> 2) << 5) & imm_mask));
+        value.Write((instruction & ~imm_mask) | (static_cast<uint32_t>((delta >> 2) << 5) & imm_mask));
     } else {
         // Otherwise, we need to write the same expression but with a known offset
         // Specifically, write the instruction but with an offset of 8
@@ -261,7 +261,7 @@ std::pair<uint8_t, int64_t> get_last_immediate(cs_insn const& inst) {
     // register is just bottom 5 bits
     constexpr uint32_t reg_mask = 0b11111;
     FLAMINGO_ASSERT(inst.detail->arm64.op_count >= 2);
-    return { *reinterpret_cast<uint32_t const*>(inst.bytes) & reg_mask, inst.detail->arm64.operands[inst.detail->arm64.op_count - 11].imm };
+    return { *reinterpret_cast<uint32_t const*>(inst.bytes) & reg_mask, inst.detail->arm64.operands[inst.detail->arm64.op_count - 1].imm };
 }
 
 csh getHandle() {
@@ -287,6 +287,9 @@ cs_insn debugInst(uint32_t const* inst) {
 
 void Trampoline::WriteFixup(uint32_t const* target) {
     // TODO: Make this faster for cases where we will write many fixups
+    // TODO: tbnz fixup (and other branches too!) need to note if they are referential and know where to branch to
+    // We need to track the fact that it isn't yet written
+    // and write the correct instruction when we perform the fixup for the instruction we DO care about.
     FLAMINGO_ASSERT(target);
     // Target is where we want to grab original instruction from
     // Log everything we do here
@@ -347,6 +350,10 @@ void Trampoline::WriteFixup(uint32_t const* target) {
                 // This is an ldr literal, SIMD
                 // https://developer.arm.com/documentation/ddi0596/2021-12/SIMD-FP-Instructions/LDR--literal--SIMD-FP---Load-SIMD-FP-Register--PC-relative-literal--
                 FLAMINGO_ABORT("LDR of the SIMD variant is not yet supported!");
+            } else {
+                // This is an LDR that doesn't need to be fixed up
+                FLAMINGO_DEBUG("Fixing up standard LDR...");
+                Write(*reinterpret_cast<uint32_t*>(inst.bytes));
             }
         } break;
         case ARM64_INS_LDRSW: {

@@ -61,34 +61,22 @@ void test_near_no_fixups() {
     perform_near_hook_test(to_hook);
 }
 
-void test_near_bls_tbzs() {
+void test_near_bls_tbzs_within_hook() {
     puts("Testing near -- bls/tbzs");
-    // TODO: tbnz fixup:
-    /*
-Addr: 0x803d244 Value: 0x37000048, tbnz w8, #0, #0x803d24c
-Addr: 0x803d248 Value: 0x14000005, b #0x803d25c
-Addr: 0x803d24c Value: 0x58000051, ldr x17, #0x803d254
-Addr: 0x803d250 Value: 0xd61f0220, br x17
-Addr: 0x803d254 Value: 0x0
-Addr: 0x803d258 Value: 0x0
-Addr: 0x803d25c Value: 0xaa1703e0, mov x0, x23
-    */
-    // WHICH IS WRONG! Because it should not branch to 0???
     static uint8_t to_hook[]{ 0x68, 0x00, 0x00, 0x37, 0xe0, 0x03, 0x17, 0xaa, 0x52, 0x3e, 0xfd, 0x97, 0xe0, 0x03, 0x17, 0xaa, 0x64, 0x7b, 0xfe, 0x97, 0x00, 0x00, 0x00, 0x00 };
     perform_near_hook_test(to_hook);
 }
 
 void test_ldr_ldrb_tbnz_bl() {
     puts("Testing near -- ldr/ldrb/tbnz/bl");
-    // TODO: ldr fixup for:
-    // Fixup for inst: 0xf9400117 at 0x803d220: ldr x23, [x8], id: 162
-    // SHOULD result in a naive copy, but INSTEAD, nothing is emitted!
     static uint8_t to_hook[]{ 0x17, 0x01, 0x40, 0xf9, 0xe8, 0xba, 0x44, 0x39, 0x68, 0x00, 0x00, 0x37, 0xe0, 0x03, 0x17, 0xaa, 0x52, 0x3e, 0xfd, 0x97, 0x00, 0x00, 0x00, 0x00 };
     perform_near_hook_test(to_hook);
 }
 
+// TODO: Test a case where we have a loop in the first 4 instructions
+
 int main() {
     test_near_no_fixups();
-    test_near_bls_tbzs();
+    test_near_bls_tbzs_within_hook();
     test_ldr_ldrb_tbnz_bl();
 }
