@@ -339,8 +339,9 @@ bool TryDeferBranch(Trampoline& self, uint16_t i, int64_t dst, int64_t target_st
         // Always emit the instruction with AN immediate.
         // For forward references, we need to defer.
         // This difference could be negative, but for those cases we will defer and overwrite.
-        auto fixup_difference = static_cast<uint32_t>(get_untagged_pc(reinterpret_cast<uint64_t>(&self.address[self.instruction_count])) -
-                                                      get_untagged_pc(reinterpret_cast<uint64_t>(&self.address[target_to_fixups[target_offset]])));
+        auto fixup_difference =
+            static_cast<uint32_t>(get_untagged_pc(reinterpret_cast<uint64_t>(&self.address[self.instruction_count])) -
+                                  get_untagged_pc(reinterpret_cast<uint64_t>(&self.address[target_to_fixups[target_offset]])));
         self.Write((inst & ~imm_mask) | ((fixup_difference >> rshift) << lshift));
         if (target_offset > i) {
             FLAMINGO_DEBUG("Deferring at: {} with target offset: {}", i, target_offset);
@@ -412,15 +413,17 @@ void Trampoline::WriteFixups(uint32_t const* target) {
         auto const& inst = insns[i];
         auto current_inst_ptr = &target[i];
         FLAMINGO_DEBUG("Fixup for inst: 0x{:x} at {}: {} {}, id: {}", *current_inst_ptr, fmt::ptr(current_inst_ptr),
-                       fmt::string_view(inst.mnemonic, sizeof(inst.mnemonic)), fmt::string_view(inst.op_str, sizeof(inst.op_str)), static_cast<int>(inst.id));
+                       fmt::string_view(inst.mnemonic, sizeof(inst.mnemonic)), fmt::string_view(inst.op_str, sizeof(inst.op_str)),
+                       static_cast<int>(inst.id));
         // For this incoming instruction, check to see if we have any forward references on this
         // If we do, for each, rewrite the target instruction with the adjusted value
         for (auto const& tag : branch_ref_map[i]) {
             // Current PC is get_untagged_pc(&address[instruction_count])
             // The instruction we emit's PC is the map from target --> fixup
             // This difference is always positive, since we are jumping FORWARD
-            uint32_t difference = static_cast<uint32_t>(get_untagged_pc(reinterpret_cast<uint64_t>(&address[instruction_count])) -
-                                                        get_untagged_pc(reinterpret_cast<uint64_t>(&address[target_to_fixups[tag.target_index]])));
+            uint32_t difference =
+                static_cast<uint32_t>(get_untagged_pc(reinterpret_cast<uint64_t>(&address[instruction_count])) -
+                                      get_untagged_pc(reinterpret_cast<uint64_t>(&address[target_to_fixups[tag.target_index]])));
             FLAMINGO_DEBUG("Performing deferred write at: {}, rewriting: {} with difference: {}", i, tag.target_index, difference);
             address[target_to_fixups[tag.target_index]] =
                 (address[target_to_fixups[tag.target_index]] & ~tag.imm_mask) | (tag.imm_mask & ((difference >> tag.rshift) << tag.lshift));
@@ -432,7 +435,8 @@ void Trampoline::WriteFixups(uint32_t const* target) {
             case ARM64_INS_B: {
                 FLAMINGO_DEBUG("Fixing up B...");
                 auto dst = get_branch_immediate(inst);
-                if (!TryDeferBranch<ARM64_INS_B>(*this, i, dst, target_start, target_end, *current_inst_ptr, target_to_fixups, branch_ref_map)) {
+                if (!TryDeferBranch<ARM64_INS_B>(*this, i, dst, target_start, target_end, *current_inst_ptr, target_to_fixups,
+                                                 branch_ref_map)) {
                     if (inst.detail->arm64.cc != ARM64_CC_INVALID) {
                         WriteCondBranch<true>(*this, *current_inst_ptr, dst);
                     } else {
@@ -443,7 +447,8 @@ void Trampoline::WriteFixups(uint32_t const* target) {
             case ARM64_INS_BL: {
                 FLAMINGO_DEBUG("Fixing up BL...");
                 auto dst = get_branch_immediate(inst);
-                if (!TryDeferBranch<ARM64_INS_BL>(*this, i, dst, target_start, target_end, *current_inst_ptr, target_to_fixups, branch_ref_map)) {
+                if (!TryDeferBranch<ARM64_INS_BL>(*this, i, dst, target_start, target_end, *current_inst_ptr, target_to_fixups,
+                                                  branch_ref_map)) {
                     WriteBl(dst);
                 }
             } break;
@@ -453,7 +458,8 @@ void Trampoline::WriteFixups(uint32_t const* target) {
             case ARM64_INS_CBZ: {
                 FLAMINGO_DEBUG("Fixing up CBNZ/CBZ...");
                 auto [reg, dst] = get_last_immediate(inst);
-                if (!TryDeferBranch<ARM64_INS_CBZ>(*this, i, dst, target_start, target_end, *current_inst_ptr, target_to_fixups, branch_ref_map)) {
+                if (!TryDeferBranch<ARM64_INS_CBZ>(*this, i, dst, target_start, target_end, *current_inst_ptr, target_to_fixups,
+                                                   branch_ref_map)) {
                     WriteCondBranch<true>(*this, *current_inst_ptr, dst);
                 }
             } break;
@@ -461,7 +467,8 @@ void Trampoline::WriteFixups(uint32_t const* target) {
             case ARM64_INS_TBZ: {
                 FLAMINGO_DEBUG("Fixing up TBNZ/TBZ...");
                 auto [reg, dst] = get_last_immediate(inst);
-                if (!TryDeferBranch<ARM64_INS_TBZ>(*this, i, dst, target_start, target_end, *current_inst_ptr, target_to_fixups, branch_ref_map)) {
+                if (!TryDeferBranch<ARM64_INS_TBZ>(*this, i, dst, target_start, target_end, *current_inst_ptr, target_to_fixups,
+                                                   branch_ref_map)) {
                     WriteCondBranch<false>(*this, *current_inst_ptr, dst);
                 }
             } break;
