@@ -38,8 +38,10 @@ struct Trampoline {
     /// BR X17
     /// DATA
     void WriteLdrBrData(uint32_t const* target);
-    void WriteFixup(uint32_t const* target);
-    void WriteFixups(uint32_t const* target, uint16_t countToFixup);
+    // TODO: Put this in an internal-trampoline header instead so that it can be used from other TUs but is not exposed
+    template <uint16_t countToFixup>
+    void WriteFixups(uint32_t const* target);
+    void WriteHookFixups(uint32_t const* target);
     /// @brief Logs various information about the trampoline.
     void Log();
     /// @brief A TRAMPOLINE IS NOT COMPLETE UNTIL FINISH IS CALLED!

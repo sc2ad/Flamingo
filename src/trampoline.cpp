@@ -1,5 +1,7 @@
 #include "trampoline.hpp"
+#include <array>
 #include <cstring>
+#include <list>
 #include "capstone/capstone.h"
 #include "capstone/platform.h"
 #include "fmt/format.h"
@@ -17,6 +19,31 @@ namespace flamingo {
 // Perhaps a full recompile for a hook is actually preferred, though, if we know we need to leapfrog
 // Since we would need to expand our trampoline and our original instructions regardless.
 // TODO: Consider a full recompile and permit late installations
+
+// Helper types for holding immediate masks, lshifts and rshifts for conversions to immediates from PC differences
+template <arm64_insn>
+struct BranchImmTypeTrait;
+
+template <arm64_insn type>
+requires(type == ARM64_INS_B || type == ARM64_INS_BL) struct BranchImmTypeTrait<type> {
+    constexpr static uint32_t imm_mask = 0b00000011111111111111111111111111U;
+    constexpr static uint32_t lshift = 0;
+    constexpr static uint32_t rshift = 2;
+};
+
+template <arm64_insn type>
+requires(type == ARM64_INS_CBZ || type == ARM64_INS_CBNZ) struct BranchImmTypeTrait<type> {
+    constexpr static uint32_t imm_mask = 0b00000000111111111111111111100000;
+    constexpr static uint32_t lshift = 5;
+    constexpr static uint32_t rshift = 2;
+};
+
+template <arm64_insn type>
+requires(type == ARM64_INS_TBZ || type == ARM64_INS_TBNZ) struct BranchImmTypeTrait<type> {
+    constexpr static uint32_t imm_mask = 0b00000000000001111111111111100000;
+    constexpr static uint32_t lshift = 5;
+    constexpr static uint32_t rshift = 2;
+};
 
 /// @brief Helper function that returns an encoded b for a particular offset
 consteval uint32_t get_b(int offset) {
@@ -278,108 +305,223 @@ csh getHandle() {
 
 cs_insn debugInst(uint32_t const* inst) {
     cs_insn* insns = nullptr;
-    auto count = cs_disasm(getHandle(), reinterpret_cast<uint8_t const*>(inst), sizeof(uint32_t), static_cast<uint64_t>(get_untagged_pc(reinterpret_cast<uint64_t>(inst))), 1, &insns);
+    auto count = cs_disasm(getHandle(), reinterpret_cast<uint8_t const*>(inst), sizeof(uint32_t),
+                           static_cast<uint64_t>(get_untagged_pc(reinterpret_cast<uint64_t>(inst))), 1, &insns);
     if (count == 1) {
         return insns[0];
     }
     return {};
 }
 
-void Trampoline::WriteFixup(uint32_t const* target) {
-    // TODO: Make this faster for cases where we will write many fixups
-    // TODO: tbnz fixup (and other branches too!) need to note if they are referential and know where to branch to
-    // We need to track the fact that it isn't yet written
-    // and write the correct instruction when we perform the fixup for the instruction we DO care about.
-    FLAMINGO_ASSERT(target);
-    // Target is where we want to grab original instruction from
-    // Log everything we do here
-    original_instructions.push_back(*target);
-    cs_insn* insns = nullptr;
-    auto count = cs_disasm(getHandle(), reinterpret_cast<uint8_t const*>(target), sizeof(uint32_t), static_cast<uint64_t>(get_untagged_pc(reinterpret_cast<uint64_t>(target))), 1, &insns);
-    FLAMINGO_ASSERT(count == 1);
-    auto inst = insns[0];
-    // constexpr uint32_t cond_branch_mask = 0b11111111000000000000000000011111;
-    // TODO: Finish writing fixups here
-    FLAMINGO_DEBUG("Fixup for inst: 0x{:x} at {}: {} {}, id: {}", *target, fmt::ptr(target), fmt::string_view(inst.mnemonic, sizeof(inst.mnemonic)), fmt::string_view(inst.op_str, sizeof(inst.op_str)),
-                   static_cast<int>(inst.id));
-    switch (inst.id) {
-        // Handle fixups for branch immediate
-        case ARM64_INS_B: {
-            FLAMINGO_DEBUG("Fixing up B...");
-            if (inst.detail->arm64.cc != ARM64_CC_INVALID) {
-                // TODO: Handle this like a conditional branch
-                auto dst = get_branch_immediate(inst);
-                WriteCondBranch<true>(*this, *target, dst);
-            } else {
-                auto dst = get_branch_immediate(inst);
-                WriteB(dst);
-            }
-        } break;
-        case ARM64_INS_BL: {
-            FLAMINGO_DEBUG("Fixing up BL...");
-            auto dst = get_branch_immediate(inst);
-            WriteBl(dst);
-        } break;
+struct BranchReferenceTag {
+    /// @brief The immediate mask to use when rewriting the instruction
+    uint32_t imm_mask;
+    /// @brief The amount to shift the immediate to the left to encode it correctly such that the mask would be valid
+    uint32_t lshift;
+    /// @brief The amount to shift the immediate to the right to encode it correctly such that the mask would be valid
+    uint32_t rshift;
+    /// @brief Index to overwrite
+    uint32_t target_index;
+};
 
-        // Handle fixups for conditional branches
-        case ARM64_INS_CBNZ:
-        case ARM64_INS_CBZ: {
-            FLAMINGO_DEBUG("Fixing up CBNZ/CBZ...");
-            auto [reg, dst] = get_last_immediate(inst);
-            WriteCondBranch<true>(*this, *target, dst);
-        } break;
-        case ARM64_INS_TBNZ:
-        case ARM64_INS_TBZ: {
-            FLAMINGO_DEBUG("Fixing up TBNZ/TBZ...");
-            auto [reg, dst] = get_last_immediate(inst);
-            WriteCondBranch<false>(*this, *target, dst);
-        } break;
-
-        // Handle fixups for load literals
-        case ARM64_INS_LDR: {
-            FLAMINGO_DEBUG("Fixing up LDR...");
-            // TODO: Finish this fixup
-            constexpr uint32_t b_31 = 0b10000000000000000000000000000000;
-            constexpr uint32_t ldr_lit_opc_mask = 0b10111111000000000000000000000000;
-            if ((*target & ldr_lit_opc_mask) == 0b00011000000000000000000000000000) {
-                // This is an ldr literal
-                // https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/LDR--literal---Load-Register--literal--
-                auto [reg, dst] = get_second_immediate(inst);
-                WriteLdr(*target, reg, dst);
-            } else if ((*target & (ldr_lit_opc_mask & ~b_31)) == 0b00011100000000000000000000000000000) {
-                // This is an ldr literal, SIMD
-                // https://developer.arm.com/documentation/ddi0596/2021-12/SIMD-FP-Instructions/LDR--literal--SIMD-FP---Load-SIMD-FP-Register--PC-relative-literal--
-                FLAMINGO_ABORT("LDR of the SIMD variant is not yet supported!");
-            } else {
-                // This is an LDR that doesn't need to be fixed up
-                FLAMINGO_DEBUG("Fixing up standard LDR...");
-                Write(*reinterpret_cast<uint32_t*>(inst.bytes));
-            }
-        } break;
-        case ARM64_INS_LDRSW: {
-            // This is an ldrsw literal
-            // https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/LDRSW--literal---Load-Register-Signed-Word--literal--
-            FLAMINGO_ABORT("LDRSW fixup not yet supported!");
-        } break;
-
-        // Handle pc-relative loads
-        case ARM64_INS_ADR: {
-            FLAMINGO_DEBUG("Fixing up ADR...");
-            auto [reg, dst] = get_second_immediate(inst);
-            WriteAdr(reg, dst);
-        } break;
-        case ARM64_INS_ADRP: {
-            FLAMINGO_DEBUG("Fixing up ADRP...");
-            auto [reg, dst] = get_second_immediate(inst);
-            WriteAdrp(reg, dst);
-        } break;
-
-        // Otherwise, just write the instruction verbatim
-        default:
-            FLAMINGO_DEBUG("Fixing up UNKNOWN: {}...", inst.id);
-            Write(*reinterpret_cast<uint32_t*>(inst.bytes));
-            break;
+template <arm64_insn type, size_t Sz>
+bool TryDeferBranch(Trampoline& self, uint16_t i, int64_t dst, int64_t target_start, int64_t target_end, uint32_t inst,
+                    std::array<uint32_t, Sz> const& target_to_fixups, std::array<std::list<BranchReferenceTag>, Sz>& branch_ref_map) {
+    // If we are within OUR fixup range, that's when things get interesting.
+    // TODO: If we are in SOME OTHER TRAMPOLINE'S fixup range, then we should use their call
+    using trait_t = BranchImmTypeTrait<type>;
+    constexpr uint32_t imm_mask = trait_t::imm_mask;
+    constexpr uint32_t lshift = trait_t::lshift;
+    constexpr uint32_t rshift = trait_t::rshift;
+    if (dst < target_end && dst >= target_start) {
+        FLAMINGO_DEBUG("Potentially deferring branch at: {} because it is within: {} and {}", dst, target_start, target_end);
+        auto target_offset = (dst - target_start) / sizeof(uint32_t);
+        // Always emit the instruction with AN immediate.
+        // For forward references, we need to defer.
+        // This difference could be negative, but for those cases we will defer and overwrite.
+        auto fixup_difference = static_cast<uint32_t>(get_untagged_pc(reinterpret_cast<uint64_t>(&self.address[self.instruction_count])) -
+                                                      get_untagged_pc(reinterpret_cast<uint64_t>(&self.address[target_to_fixups[target_offset]])));
+        self.Write((inst & ~imm_mask) | ((fixup_difference >> rshift) << lshift));
+        if (target_offset > i) {
+            FLAMINGO_DEBUG("Deferring at: {} with target offset: {}", i, target_offset);
+            // Need to defer.
+            // Deference SHOULD never cause the instruction being deferred to expand in size.
+            // It should always be possible to point the deferred instruction to the new one without emitting more instructions
+            branch_ref_map[target_offset].push_back({
+                .imm_mask = imm_mask,
+                .lshift = lshift,
+                .rshift = rshift,
+                .target_index = i,
+            });
+        }
+        return true;
     }
+    return false;
+}
+
+template <uint16_t countToFixup>
+void Trampoline::WriteFixups(uint32_t const* target) {
+    FLAMINGO_ASSERT(target);
+    // Copy over original instructions
+    FLAMINGO_DEBUG("Fixing up: {} instructions!", countToFixup);
+    original_instructions.resize(countToFixup);
+    std::memcpy(original_instructions.data(), target, countToFixup);
+    // The end of the fixups is used for referential branches
+    auto target_start = get_untagged_pc(reinterpret_cast<uint64_t>(target));
+    auto target_end = get_untagged_pc(reinterpret_cast<uint64_t>(&target[countToFixup]));
+    // Disassemble the instructions into this pointer, which we can then index into per instruction
+    cs_insn* insns = nullptr;
+    auto count = cs_disasm(getHandle(), reinterpret_cast<uint8_t const*>(target), sizeof(uint32_t) * countToFixup,
+                           static_cast<uint64_t>(get_untagged_pc(reinterpret_cast<uint64_t>(target))), countToFixup, &insns);
+    // We should never try to write fixups for something that isn't a valid instruction
+    FLAMINGO_ASSERT(count == countToFixup);
+    // We use this set to track referential branches going forwards
+    // If it is a branch, check to see if the target immediate would place us within our fixup range
+    // If so, we need to:
+    // - If the target is behind us, use the new target directly
+    // - If the target is in front of us, defer the write until later.
+    // We defer the write by basically writing the branch itself (since it must be a close branch)
+    // and then add its index (and its immediate mask and shift amount) to some set.
+    // Then, when we start the fixup for an instruction, we check the set to see if we should go back and fix the specified indices.
+    // To fix them, we simply walk all of the indices we wish to fix, and for each:
+    // - Current PC of instruction - &target[index] to replace
+    // - Use as argument for shift + mask?
+
+    // TODO: Avoid heap alloc if possible
+    std::array<std::list<BranchReferenceTag>, countToFixup> branch_ref_map{};
+    // Holds the mapping of target index to fixup index
+    // TODO: Make this a publicly exposed member?
+    // TODO: Technically, we need to see if ANY branch target would leave us in ANY fixup block...
+    // TODO: Should collect a set of references so that if we ever install a hook over somewhere we would jump to we would force a recompile
+    // We should check against the full set of trampolines for this
+    std::array<uint32_t, countToFixup> target_to_fixups{};
+
+    for (uint16_t i = 0; i < countToFixup; i++) {
+        // If it is a branch, check to see if the target immediate would place us within our fixup range
+        // If so, we need to:
+        // - If the target is behind us, use the new target directly
+        // - If the target is in front of us, defer the write until later.
+        // We defer the write by basically writing the branch itself (since it must be a close branch)
+        // and then add its index (and its immediate mask and shift amount) to some set.
+        // Then, when we start the fixup for an instruction, we check the set to see if we should go back and fix the specified indices.
+        // To fix them, we simply walk all of the indices we wish to fix, and for each:
+        // - Current PC of instruction - &target[index] to replace
+        // - Use as argument for shift + mask?
+
+        // For each input instruction, perform a fixup on it
+        auto const& inst = insns[i];
+        auto current_inst_ptr = &target[i];
+        FLAMINGO_DEBUG("Fixup for inst: 0x{:x} at {}: {} {}, id: {}", *current_inst_ptr, fmt::ptr(current_inst_ptr),
+                       fmt::string_view(inst.mnemonic, sizeof(inst.mnemonic)), fmt::string_view(inst.op_str, sizeof(inst.op_str)), static_cast<int>(inst.id));
+        // For this incoming instruction, check to see if we have any forward references on this
+        // If we do, for each, rewrite the target instruction with the adjusted value
+        for (auto const& tag : branch_ref_map[i]) {
+            // Current PC is get_untagged_pc(&address[instruction_count])
+            // The instruction we emit's PC is the map from target --> fixup
+            // This difference is always positive, since we are jumping FORWARD
+            uint32_t difference = static_cast<uint32_t>(get_untagged_pc(reinterpret_cast<uint64_t>(&address[instruction_count])) -
+                                                        get_untagged_pc(reinterpret_cast<uint64_t>(&address[target_to_fixups[tag.target_index]])));
+            FLAMINGO_DEBUG("Performing deferred write at: {}, rewriting: {} with difference: {}", i, tag.target_index, difference);
+            address[target_to_fixups[tag.target_index]] =
+                (address[target_to_fixups[tag.target_index]] & ~tag.imm_mask) | (tag.imm_mask & ((difference >> tag.rshift) << tag.lshift));
+        }
+        // Set the target map entry for this incoming instruction to the current offset of the output
+        target_to_fixups[i] = instruction_count;
+        switch (inst.id) {
+            // Handle fixups for branch immediate
+            case ARM64_INS_B: {
+                FLAMINGO_DEBUG("Fixing up B...");
+                auto dst = get_branch_immediate(inst);
+                if (!TryDeferBranch<ARM64_INS_B>(*this, i, dst, target_start, target_end, *current_inst_ptr, target_to_fixups, branch_ref_map)) {
+                    if (inst.detail->arm64.cc != ARM64_CC_INVALID) {
+                        WriteCondBranch<true>(*this, *current_inst_ptr, dst);
+                    } else {
+                        WriteB(dst);
+                    }
+                }
+            } break;
+            case ARM64_INS_BL: {
+                FLAMINGO_DEBUG("Fixing up BL...");
+                auto dst = get_branch_immediate(inst);
+                if (!TryDeferBranch<ARM64_INS_BL>(*this, i, dst, target_start, target_end, *current_inst_ptr, target_to_fixups, branch_ref_map)) {
+                    WriteBl(dst);
+                }
+            } break;
+
+            // Handle fixups for conditional branches
+            case ARM64_INS_CBNZ:
+            case ARM64_INS_CBZ: {
+                FLAMINGO_DEBUG("Fixing up CBNZ/CBZ...");
+                auto [reg, dst] = get_last_immediate(inst);
+                if (!TryDeferBranch<ARM64_INS_CBZ>(*this, i, dst, target_start, target_end, *current_inst_ptr, target_to_fixups, branch_ref_map)) {
+                    WriteCondBranch<true>(*this, *current_inst_ptr, dst);
+                }
+            } break;
+            case ARM64_INS_TBNZ:
+            case ARM64_INS_TBZ: {
+                FLAMINGO_DEBUG("Fixing up TBNZ/TBZ...");
+                auto [reg, dst] = get_last_immediate(inst);
+                if (!TryDeferBranch<ARM64_INS_TBZ>(*this, i, dst, target_start, target_end, *current_inst_ptr, target_to_fixups, branch_ref_map)) {
+                    WriteCondBranch<false>(*this, *current_inst_ptr, dst);
+                }
+            } break;
+
+            // Handle fixups for load literals
+            case ARM64_INS_LDR: {
+                FLAMINGO_DEBUG("Fixing up LDR...");
+                // TODO: Handle the case where an LDR would land in a fixup range, so we need to copy the raw values
+                constexpr uint32_t b_31 = 0b10000000000000000000000000000000;
+                constexpr uint32_t ldr_lit_opc_mask = 0b10111111000000000000000000000000;
+                if ((*current_inst_ptr & ldr_lit_opc_mask) == 0b00011000000000000000000000000000) {
+                    // This is an ldr literal
+                    // https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/LDR--literal---Load-Register--literal--
+                    auto [reg, dst] = get_second_immediate(inst);
+                    WriteLdr(*current_inst_ptr, reg, dst);
+                } else if ((*current_inst_ptr & (ldr_lit_opc_mask & ~b_31)) == 0b00011100000000000000000000000000000) {
+                    // This is an ldr literal, SIMD
+                    // https://developer.arm.com/documentation/ddi0596/2021-12/SIMD-FP-Instructions/LDR--literal--SIMD-FP---Load-SIMD-FP-Register--PC-relative-literal--
+                    FLAMINGO_ABORT("LDR of the SIMD variant is not yet supported!");
+                } else {
+                    // This is an LDR that doesn't need to be fixed up
+                    FLAMINGO_DEBUG("Fixing up standard LDR...");
+                    Write(*reinterpret_cast<uint32_t const*>(inst.bytes));
+                }
+            } break;
+            case ARM64_INS_LDRSW: {
+                // This is an ldrsw literal
+                // See TODOs for LDR
+                // https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/LDRSW--literal---Load-Register-Signed-Word--literal--
+                FLAMINGO_ABORT("LDRSW fixup not yet supported!");
+            } break;
+
+            // Handle pc-relative loads
+            case ARM64_INS_ADR: {
+                FLAMINGO_DEBUG("Fixing up ADR...");
+                auto [reg, dst] = get_second_immediate(inst);
+                WriteAdr(reg, dst);
+            } break;
+            case ARM64_INS_ADRP: {
+                FLAMINGO_DEBUG("Fixing up ADRP...");
+                auto [reg, dst] = get_second_immediate(inst);
+                WriteAdrp(reg, dst);
+            } break;
+
+            // Otherwise, just write the instruction verbatim
+            default:
+                FLAMINGO_DEBUG("Fixing up UNKNOWN: {}...", inst.id);
+                Write(*reinterpret_cast<uint32_t const*>(inst.bytes));
+                break;
+        }
+    }
+
+    // Free the disassembled instructions from before the fixups
+    cs_free(insns, countToFixup);
+}
+
+void Trampoline::WriteHookFixups(uint32_t const* target) {
+    // Write the fixups for a standard hook.
+    // Ideally, this is hidden entirely and only the hook API can do this
+    WriteFixups<4>(target);
 }
 
 void Trampoline::WriteCallback(uint32_t const* target) {
@@ -396,16 +538,6 @@ void Trampoline::WriteCallback(uint32_t const* target) {
         constexpr uint32_t b_opcode = 0b00010100000000000000000000000000U;
         Write(b_opcode | ((delta >> 2) & branch_imm_mask));
     }
-}
-
-void Trampoline::WriteFixups(uint32_t const* target, uint16_t countToFixup) {
-    original_instructions.reserve(countToFixup);
-    FLAMINGO_DEBUG("Fixing up: {} instructions!", countToFixup);
-    while (countToFixup-- > 0) {
-        WriteFixup(target++);
-    }
-    WriteCallback(target);
-    Finish();
 }
 
 void Trampoline::Finish() {
