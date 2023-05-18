@@ -4,6 +4,7 @@
 #include <list>
 #include "trampoline.hpp"
 #include "util.hpp"
+#include <fmt/format.h>
 
 namespace {
 struct PageType {
@@ -30,7 +31,8 @@ Trampoline TrampolineAllocator::Allocate(std::size_t trampolineSize) {
         // If we have enough space in our page for this trampoline, squeeze it in!
         if (PageSize - page.used_size > trampolineSize) {
             // TODO: We have to be aligned 16 here
-            Trampoline to_ret(reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(page.ptr) + page.used_size), trampolineSize, page.used_size);
+            Trampoline to_ret(reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(page.ptr) + page.used_size), trampolineSize,
+                              page.used_size);
             page.used_size += trampolineSize;
             page.trampoline_count++;
             // Log allocated trampoline here

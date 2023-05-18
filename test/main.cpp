@@ -21,7 +21,7 @@ decltype(auto) test_near(uint32_t* target, uint32_t const* callback) {
     // Hook size is 5, but we only fixup 4
     trampoline.WriteHookFixups(target);
     // Write the jump back to instruction 5
-    trampoline.WriteCallback(&target[5]);
+    trampoline.WriteCallback(&target[4]);
     trampoline.Finish();
     // Write actual hook to be a callback
     // We need to mark the location of target as writable (so we can write to it correctly)
