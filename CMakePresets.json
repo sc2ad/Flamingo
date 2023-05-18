@@ -1,0 +1,27 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "Android",
+      "generator": "Ninja",
+      "binaryDir": "./build"
+    },
+    {
+      "name": "desktop",
+      "generator": "Ninja",
+      "binaryDir": "./build_desktop"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "Android",
+      "configurePreset": "Android",
+      "inheritConfigureEnvironment": true
+    },
+    {
+      "name": "desktop",
+      "configurePreset": "desktop",
+      "inheritConfigureEnvironment": true
+    }
+  ]
+}
