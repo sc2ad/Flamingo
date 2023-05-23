@@ -6,9 +6,6 @@
 namespace flamingo {
 
 struct Trampoline {
-    // In bytes for a single fixup
-    constexpr static uint16_t MaximumFixupSize = 20;
-
     uint32_t* address;
     std::size_t alloc_size;
     // size is number of instructions

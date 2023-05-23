@@ -1,10 +1,10 @@
 #include "trampoline-allocator.hpp"
+#include <fmt/format.h>
 #include <sys/mman.h>
 #include <cstdlib>
 #include <list>
 #include "trampoline.hpp"
 #include "util.hpp"
-#include <fmt/format.h>
 
 namespace {
 struct PageType {
@@ -41,14 +41,14 @@ Trampoline TrampolineAllocator::Allocate(std::size_t trampolineSize) {
     }
     // No pages with enough space available.
     void* ptr;
-    if (!::posix_memalign(&ptr, PageSize, PageSize)) {
+    if (::posix_memalign(&ptr, PageSize, PageSize) != 0) {
         // Log error on memalign allocation!
-        FLAMINGO_ABORT("Failed to allocate trampoline page of size: {} for size: {}", PageSize, trampolineSize);
+        FLAMINGO_ABORT("Failed to allocate trampoline page of size: {} for size: {}. err: {}", PageSize, trampolineSize, strerror(errno));
     }
     // Mark full page as rxw
-    if (!::mprotect(ptr, PageSize, PROT_READ | PROT_WRITE | PROT_EXEC)) {
+    if (::mprotect(ptr, PageSize, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
         // Log error on mprotect!
-        FLAMINGO_ABORT("Failed to mark allocated page at: {} as +rwx!", fmt::ptr(ptr));
+        FLAMINGO_ABORT("Failed to mark allocated page at: {} as +rwx. err: {}", fmt::ptr(ptr), strerror(errno));
     }
     auto& page = pages.emplace_back(ptr, trampolineSize);
     return { static_cast<uint32_t*>(ptr), trampolineSize, page.used_size };
@@ -68,7 +68,7 @@ void TrampolineAllocator::Free(Trampoline const& toFree) {
             if (p.trampoline_count == 0) {
                 if (::mprotect(p.ptr, PageSize, PROT_READ) != 0) {
                     // Log error on mprotect
-                    FLAMINGO_ABORT("Failed to mark page at: {} as read only!", fmt::ptr(p.ptr));
+                    FLAMINGO_ABORT("Failed to mark page at: {} as read only. err: {}", fmt::ptr(p.ptr), strerror(errno));
                 }
                 ::free(p.ptr);
             }

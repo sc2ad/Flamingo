@@ -14,10 +14,11 @@
 #endif
 
 #define FLAMINGO_CRITICAL(...) Paper::Logger::fmtLog<Paper::LogLevel::CRIT>(__VA_ARGS__)
-#define FLAMINGO_ABORT(...)            \
-    do {                               \
-        SAFE_ABORT_MSG(__VA_ARGS__);   \
-        Paper::Logger::WaitForFlush(); \
+#define FLAMINGO_ABORT(...)             \
+    do {                                \
+        FLAMINGO_CRITICAL(__VA_ARGS__); \
+        Paper::Logger::WaitForFlush();  \
+        SAFE_ABORT();                   \
     } while (0)
 
 #else
