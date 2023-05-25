@@ -1,5 +1,5 @@
 # include some defines automatically made by qpm
-include(qpm_defines.cmake)
+include(qpm_defines_fixed.cmake)
 
 cmake_minimum_required(VERSION 3.22)
 project(${COMPILE_ID})
@@ -24,6 +24,7 @@ FetchContent_MakeAvailable(googletest)
 # c++ standard
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED 20)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # define that stores the actual source directory
 set(SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -69,7 +70,7 @@ target_include_directories(${COMPILE_ID} PRIVATE ${INCLUDE_DIR})
 # add shared dir as include dir
 target_include_directories(${COMPILE_ID} PUBLIC ${SHARED_DIR})
 
-target_link_libraries(${COMPILE_ID} PRIVATE -llog GSL)
+target_link_libraries(${COMPILE_ID} PRIVATE GSL)
 
 include(extern.cmake)
 MESSAGE(STATUS "extern added!")
@@ -89,18 +90,21 @@ add_custom_command(TARGET ${COMPILE_ID} POST_BUILD
             COMMENT "Rename the stripped lib to regular"
             )
 
-enable_testing()
 
-add_compile_options(-Wall -Wextra -Werror -Wpedantic)
-add_executable(
-    test
-    test/main.cpp
-)
-target_include_directories(test PUBLIC ${SHARED_DIR})
-target_link_libraries(
-    test
-    GTest::gtest_main
-)
+if (DEFINED TEST_BUILD)
+    enable_testing()
 
-include(GoogleTest)
-gtest_discover_tests(test)
+    add_compile_options(-Wall -Wextra -Werror -Wpedantic)
+    add_executable(
+        test
+        test/main.cpp
+    )
+    target_include_directories(test PUBLIC ${SHARED_DIR})
+    target_link_libraries(
+        test
+        GTest::gtest_main
+    )
+
+    include(GoogleTest)
+    gtest_discover_tests(test)
+endif()

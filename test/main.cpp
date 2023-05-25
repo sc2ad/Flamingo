@@ -8,6 +8,14 @@
 #include "../shared/trampoline.hpp"
 #include "capstone/capstone.h"
 
+// #include "../shared/hook-installer.hpp"
+// #include "../shared/more_stuff.hpp"
+// #include "hook-installer.hpp"
+// #include "modloader/shared/modloader.hpp"
+// #include <type_traits>
+#include <cassert>
+// #include "../shared/enum-helpers.hpp"
+
 decltype(auto) test_near(uint32_t* target, uint32_t const* callback) {
     constexpr size_t hookSize = 32;
     constexpr size_t pageSize = 4096;

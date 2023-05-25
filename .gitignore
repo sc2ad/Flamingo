@@ -56,5 +56,6 @@ extern/
 extern.cmake
 qpm_defines.cmake
 build/
+build_desktop/
 
 build-linux/
