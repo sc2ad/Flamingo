@@ -2,9 +2,8 @@
 #include <array>
 #include <cstring>
 #include <list>
-#include "capstone/capstone.h"
-#include "capstone/platform.h"
-#include "fmt/format.h"
+#include "capstone/shared/capstone/capstone.h"
+#include "capstone/shared/capstone/platform.h"
 #include "util.hpp"
 
 namespace flamingo {
@@ -25,21 +24,24 @@ template <arm64_insn>
 struct BranchImmTypeTrait;
 
 template <arm64_insn type>
-requires(type == ARM64_INS_B || type == ARM64_INS_BL) struct BranchImmTypeTrait<type> {
+    requires(type == ARM64_INS_B || type == ARM64_INS_BL)
+struct BranchImmTypeTrait<type> {
     constexpr static uint32_t imm_mask = 0b00000011111111111111111111111111U;
     constexpr static uint32_t lshift = 0;
     constexpr static uint32_t rshift = 2;
 };
 
 template <arm64_insn type>
-requires(type == ARM64_INS_CBZ || type == ARM64_INS_CBNZ) struct BranchImmTypeTrait<type> {
+    requires(type == ARM64_INS_CBZ || type == ARM64_INS_CBNZ)
+struct BranchImmTypeTrait<type> {
     constexpr static uint32_t imm_mask = 0b00000000111111111111111111100000;
     constexpr static uint32_t lshift = 5;
     constexpr static uint32_t rshift = 2;
 };
 
 template <arm64_insn type>
-requires(type == ARM64_INS_TBZ || type == ARM64_INS_TBNZ) struct BranchImmTypeTrait<type> {
+    requires(type == ARM64_INS_TBZ || type == ARM64_INS_TBNZ)
+struct BranchImmTypeTrait<type> {
     constexpr static uint32_t imm_mask = 0b00000000000001111111111111100000;
     constexpr static uint32_t lshift = 5;
     constexpr static uint32_t rshift = 2;
@@ -48,17 +50,17 @@ requires(type == ARM64_INS_TBZ || type == ARM64_INS_TBNZ) struct BranchImmTypeTr
 /// @brief Helper function that returns an encoded b for a particular offset
 consteval uint32_t get_b(int offset) {
     constexpr uint32_t b_opcode = 0b00010100000000000000000000000000U;
-    return (b_opcode | (offset >> 2));
+    return (b_opcode | (static_cast<uint32_t>(offset) >> 2U));
 }
 
 constexpr int64_t get_untagged_pc(uint64_t pc) {
     // Upper byte is tagged for PC addresses on android 11+
-    constexpr uint64_t mask = ~(0xFFULL << 56);
+    constexpr uint64_t mask = ~(0xFFULL << (64U - 8U));
     return static_cast<int64_t>(static_cast<uint64_t>(pc) & mask);
 }
 
 void Trampoline::Write(uint32_t instruction) {
-    FLAMINGO_ASSERT((instruction_count + 1) * sizeof(uint32_t) <= alloc_size);
+    FLAMINGO_ASSERT(instruction_count + 1 <= num_insts);
     // Log what we are writing (and also our state)
     address[instruction_count] = instruction;
     instruction_count++;
@@ -67,15 +69,15 @@ void Trampoline::Write(uint32_t instruction) {
 void Trampoline::WriteData(void const* ptr) {
     // TODO: Write this to a different buffer and return a pointer to it
     // This would allow the control flow for a hook to be much cleaner and the data section to be well defined
-    FLAMINGO_ASSERT(instruction_count * sizeof(uint32_t) + sizeof(void*) <= alloc_size);
+    FLAMINGO_ASSERT(instruction_count + sizeof(void*) / sizeof(uint32_t) <= num_insts);
     // Log what we are writing (and also our state)
-    *reinterpret_cast<void**>(&address[instruction_count]) = const_cast<void*>(ptr);
+    *reinterpret_cast<void const**>(&address[instruction_count]) = ptr;
     instruction_count += sizeof(void*) / sizeof(uint32_t);
 }
 
 void Trampoline::WriteData(void const* ptr, uint32_t size) {
     // TODO: Write this to a different buffer and return a pointer to it
-    FLAMINGO_ASSERT((size + instruction_count) * sizeof(uint32_t) <= alloc_size);
+    FLAMINGO_ASSERT((size + instruction_count) <= num_insts);
     FLAMINGO_DEBUG("Writing data from: {} of size: {}", ptr, size * sizeof(uint32_t));
     std::memcpy(&address[instruction_count], ptr, size * sizeof(uint32_t));
     instruction_count += size;
@@ -120,13 +122,13 @@ void Trampoline::WriteAdr(uint8_t reg, int64_t imm) {
     constexpr uint32_t reg_mask = 0b11111;
     int64_t pc = get_untagged_pc(reinterpret_cast<uint64_t>(&address[instruction_count]));
     int64_t delta = imm - pc;
-    if (std::llabs(delta) >= (adr_maximum_imm >> 1)) {
+    if (std::llabs(delta) >= (adr_maximum_imm >> 1U)) {
         // Too far to emit just an adr.
         // LDR (used register), #0x8
         constexpr uint32_t ldr_mask = 0b01011000000000000000000000000000U;
         // https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/LDR--literal---Load-Register--literal--
         // imm is encoded as << 2, LSB just to the right of reg
-        constexpr uint32_t ldr_imm = (8U >> 2U) << 5;
+        constexpr uint32_t ldr_imm = (8U >> 2U) << 5U;
         Write(ldr_mask | ldr_imm | (reg_mask & reg));
         // B #0xC
         constexpr uint32_t b_0xc = 0x14000003U;
@@ -139,9 +141,9 @@ void Trampoline::WriteAdr(uint8_t reg, int64_t imm) {
         // Note that delta should be within +-1 MB
         constexpr uint32_t adr_opcode = 0b00010000000000000000000000000000;
         // Get immlo
-        uint32_t imm_lo = ((static_cast<uint32_t>(delta) & 3) << 29);
+        uint32_t imm_lo = ((static_cast<uint32_t>(delta) & 3U) << 29);
         // Get immhi
-        uint32_t imm_hi = (static_cast<uint32_t>(delta) >> 2) << 5;
+        uint32_t imm_hi = (static_cast<uint32_t>(delta) >> 2U) << 5;
         Write(adr_opcode | imm_lo | imm_hi | (reg_mask & reg));
     }
 }
@@ -150,7 +152,7 @@ void Trampoline::WriteAdrp(uint8_t reg, int64_t imm) {
     // https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/ADR--Form-PC-relative-address-?lang=en
     // constexpr uint32_t adr_maximum_imm = 0b00000000000111111111111111111111U;
     constexpr uint32_t reg_mask = 0b11111;
-    constexpr uint32_t pc_imm_mask = ~0b111111111111;
+    constexpr uint32_t pc_imm_mask = ~0b111111111111U;
     constexpr int64_t adrp_maximum_imm = 0xFFFFF000U;
     int64_t pc = get_untagged_pc(reinterpret_cast<uint64_t>(&address[instruction_count]));
     int64_t delta = (pc & pc_imm_mask) - imm;
@@ -336,6 +338,8 @@ bool TryDeferBranch(Trampoline& self, uint16_t i, int64_t dst, int64_t target_st
     if (dst < target_end && dst >= target_start) {
         FLAMINGO_DEBUG("Potentially deferring branch at: {} because it is within: {} and {}", dst, target_start, target_end);
         auto target_offset = (dst - target_start) / sizeof(uint32_t);
+        FLAMINGO_ASSERT(target_offset < target_to_fixups.size());
+        FLAMINGO_ASSERT(target_offset < branch_ref_map.size());
         // Always emit the instruction with AN immediate.
         // For forward references, we need to defer.
         // This difference could be negative, but for those cases we will defer and overwrite.
@@ -421,7 +425,7 @@ void Trampoline::WriteFixups(uint32_t const* target) {
             // Current PC is get_untagged_pc(&address[instruction_count])
             // The instruction we emit's PC is the map from target --> fixup
             // This difference is always positive, since we are jumping FORWARD
-            uint32_t difference =
+            auto difference =
                 static_cast<uint32_t>(get_untagged_pc(reinterpret_cast<uint64_t>(&address[instruction_count])) -
                                       get_untagged_pc(reinterpret_cast<uint64_t>(&address[target_to_fixups[tag.target_index]])));
             FLAMINGO_DEBUG("Performing deferred write at: {}, rewriting: {} with difference: {}", i, tag.target_index, difference);
@@ -484,7 +488,7 @@ void Trampoline::WriteFixups(uint32_t const* target) {
                     // https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/LDR--literal---Load-Register--literal--
                     auto [reg, dst] = get_second_immediate(inst);
                     WriteLdr(*current_inst_ptr, reg, dst);
-                } else if ((*current_inst_ptr & (ldr_lit_opc_mask & ~b_31)) == 0b00011100000000000000000000000000000) {
+                } else if ((*current_inst_ptr & (ldr_lit_opc_mask & ~b_31)) == 0b00011100000000000000000000000000) {
                     // This is an ldr literal, SIMD
                     // https://developer.arm.com/documentation/ddi0596/2021-12/SIMD-FP-Instructions/LDR--literal--SIMD-FP---Load-SIMD-FP-Register--PC-relative-literal--
                     FLAMINGO_ABORT("LDR of the SIMD variant is not yet supported!");
@@ -548,7 +552,7 @@ void Trampoline::WriteCallback(uint32_t const* target) {
 }
 
 void Trampoline::Finish() {
-    pageSizeRef -= alloc_size - (instruction_count * sizeof(uint32_t));
+    pageSizeRef -= (num_insts - instruction_count) * sizeof(uint32_t);
     FLAMINGO_DEBUG("Completed trampoline allocation of: {} instructions!", instruction_count);
 }
 

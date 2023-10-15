@@ -2,7 +2,7 @@
 
 #include <cstdint>
 #include <cstdlib>
-#include "capstone/capstone.h"
+#include "capstone/shared/capstone/capstone.h"
 
 namespace flamingo {
 

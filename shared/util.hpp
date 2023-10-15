@@ -1,4 +1,44 @@
 #pragma once
+
+#define FLAMINGO_ID "flamingo"
+#define FLAMINGO_VERSION "0.1.0"
+
+#ifdef FLAMINGO_HEADER_ONLY
+
+#ifdef ANDROID
+#include <android/log.h>
+#include <fmt/core.h>
+#include <cstddef>
+#include <string>
+
+#define LOGA(lvl, ...)                                                                   \
+    do {                                                                                 \
+        std::string __ss = fmt::format(__VA_ARGS__);                                     \
+        __android_log_print(lvl, FLAMINGO_ID "|v" FLAMINGO_VERSION, "%s", __ss.c_str()); \
+    } while (0)
+
+#ifndef NO_DEBUG_LOGS
+#define FLAMINGO_DEBUG(...) LOGA(ANDROID_LOG_DEBUG, __VA_ARGS__)
+#define FLAMINGO_ASSERT(...)                                                   \
+    do {                                                                       \
+        if (!(__VA_ARGS__)) FLAMINGO_ABORT("Failed condition: " #__VA_ARGS__); \
+    } while (0)
+#else
+#define FLAMINGO_DEBUG(...)
+#define FLAMINGO_ASSERT(...) __builtin_assume(__VA_ARGS__)
+#endif
+
+#define FLAMINGO_CRITICAL(...) LOGA(ANDROID_LOG_FATAL, __VA_ARGS__)
+#define FLAMINGO_ABORT(...)             \
+    do {                                \
+        FLAMINGO_CRITICAL(__VA_ARGS__); \
+        std::abort();                   \
+    } while (0)
+#else  // ANDROID
+#error "Need logging definitions here, for non-ANDROID, header only support!"
+#endif
+
+#else  // FLAMINGO_HEADER_ONLY
 #include <cassert>
 
 #ifdef ANDROID
@@ -22,7 +62,6 @@
     } while (0)
 
 #else
-#include <fmt/core.h>
 #include <cstddef>
 #include <cstdio>
 
@@ -37,4 +76,6 @@
     fmt::print(__VA_ARGS__); \
     puts("");                \
     std::abort()
+#endif
+
 #endif

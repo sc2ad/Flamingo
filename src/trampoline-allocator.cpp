@@ -1,5 +1,4 @@
 #include "trampoline-allocator.hpp"
-#include <fmt/format.h>
 #include <sys/mman.h>
 #include <cstdlib>
 #include <list>
@@ -43,12 +42,13 @@ Trampoline TrampolineAllocator::Allocate(std::size_t trampolineSize) {
     void* ptr;
     if (::posix_memalign(&ptr, PageSize, PageSize) != 0) {
         // Log error on memalign allocation!
-        FLAMINGO_ABORT("Failed to allocate trampoline page of size: {} for size: {}. err: {}", PageSize, trampolineSize, strerror(errno));
+        FLAMINGO_ABORT("Failed to allocate trampoline page of size: {} for size: {}. err: {}", PageSize, trampolineSize,
+                       std::strerror(errno));
     }
     // Mark full page as rxw
     if (::mprotect(ptr, PageSize, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
         // Log error on mprotect!
-        FLAMINGO_ABORT("Failed to mark allocated page at: {} as +rwx. err: {}", fmt::ptr(ptr), strerror(errno));
+        FLAMINGO_ABORT("Failed to mark allocated page at: {} as +rwx. err: {}", fmt::ptr(ptr), std::strerror(errno));
     }
     auto& page = pages.emplace_back(ptr, trampolineSize);
     return { static_cast<uint32_t*>(ptr), trampolineSize, page.used_size };
@@ -61,14 +61,14 @@ void TrampolineAllocator::Free(Trampoline const& toFree) {
     // 2. deallocate the page
 
     // Find page we are allocated on
-    auto page_addr = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(toFree.address) & ~(PageSize - 1));
+    auto page_addr = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(toFree.address.data()) & ~(PageSize - 1));
     for (auto& p : pages) {
         if (p.ptr == page_addr) {
             p.trampoline_count--;
             if (p.trampoline_count == 0) {
                 if (::mprotect(p.ptr, PageSize, PROT_READ) != 0) {
                     // Log error on mprotect
-                    FLAMINGO_ABORT("Failed to mark page at: {} as read only. err: {}", fmt::ptr(p.ptr), strerror(errno));
+                    FLAMINGO_ABORT("Failed to mark page at: {} as read only. err: {}", fmt::ptr(p.ptr), std::strerror(errno));
                 }
                 ::free(p.ptr);
             }
@@ -76,7 +76,8 @@ void TrampolineAllocator::Free(Trampoline const& toFree) {
         }
     }
     // If we get here, we couldn't free the provided Trampoline!
-    FLAMINGO_ABORT("Failed to free trampoline at: {}, no matching page with page addr: {}!", fmt::ptr(toFree.address), fmt::ptr(page_addr));
+    FLAMINGO_ABORT("Failed to free trampoline at: {}, no matching page with page addr: {}!", fmt::ptr(toFree.address.data()),
+                   fmt::ptr(page_addr));
 }
 
 }  // namespace flamingo

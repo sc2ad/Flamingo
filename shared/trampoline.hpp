@@ -1,19 +1,22 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <vector>
 
 namespace flamingo {
 
 struct Trampoline {
-    uint32_t* address;
-    std::size_t alloc_size;
+    std::span<uint32_t> address;
     // size is number of instructions
+    // TODO: Make a transparent type here to avoid accidental comparison with other types of size
+    std::size_t num_insts;
     std::size_t instruction_count = 0;
     std::size_t& pageSizeRef;
     std::vector<uint32_t> original_instructions{};
 
-    Trampoline(uint32_t* ptr, std::size_t allocationSize, std::size_t& sz) : address(ptr), alloc_size(allocationSize), pageSizeRef(sz) {}
+    Trampoline(uint32_t* ptr, std::size_t num_insts, std::size_t& sz)
+        : address(ptr, &ptr[num_insts]), num_insts(num_insts), pageSizeRef(sz) {}
 
     void Write(uint32_t instruction);
     /// @brief Writes the specified pointer as a target specific immediate to the data block.

@@ -62,7 +62,7 @@ decltype(auto) test_far(uint32_t* target, uint32_t const* callback) {
     constexpr size_t hookSize = 32;
     constexpr size_t trampolineSize = 64;
     auto trampoline = flamingo::TrampolineAllocator::Allocate(trampolineSize);
-    printf("TRAMPOLINE: %p\n", trampoline.address);
+    printf("TRAMPOLINE: %p\n", trampoline.address.data());
     // Attempt to write a hook from target --> callback (just for testing purposes)
     std::size_t trampoline_size = hookSize;
     // Hook size is 5, but we only fixup 4
@@ -85,7 +85,7 @@ void perform_far_hook_test(uint8_t* to_hook) {
     puts("TEST FAR...");
     auto trampoline = test_far(reinterpret_cast<uint32_t*>(to_hook), (const uint32_t*)(0xDEADBEEFBAADF00DULL));
     // Use 20 here as a reasonable guesstimate
-    print_decode_loop(trampoline.address, 20);
+    print_decode_loop(trampoline.address.data(), 20);
     puts("HOOKED:");
     print_decode_loop(reinterpret_cast<uint32_t*>(to_hook), 6);
 }
