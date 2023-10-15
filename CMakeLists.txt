@@ -52,7 +52,7 @@ add_library(
 # recursively get all src files
 # RECURSE_FILES(cpp_file_list_utils ${SOURCE_DIR}/*.cpp)
 # RECURSE_FILES(c_file_list_utils ${SOURCE_DIR}/*.c)
-target_sources(${COMPILE_ID} PRIVATE ${SOURCE_DIR}/trampoline.cpp ${SOURCE_DIR}/trampoline-allocator.cpp)
+target_sources(${COMPILE_ID} PRIVATE ${SOURCE_DIR}/trampoline/trampoline.cpp ${SOURCE_DIR}/trampoline/trampoline-allocator.cpp)
 # target_sources(${COMPILE_ID} PRIVATE ${c_file_list_utils})
 
 # if (DEFINED TEST_BUILD)
