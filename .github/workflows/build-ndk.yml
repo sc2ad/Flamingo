@@ -50,11 +50,11 @@ jobs:
       - name: Build
         run: |
           cd ${GITHUB_WORKSPACE}
-          qpm-rust restore
           qpm-rust s build
 
       - name: Create Qmod
         run: |
+          qpm-rust qmod build
           pwsh -Command ./createqmod.ps1 ${{env.qmodName}}
 
       - name: Get Library Name
