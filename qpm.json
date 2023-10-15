@@ -14,28 +14,16 @@
     {
       "id": "capstone",
       "versionRange": "^0.1.0",
-      "additionalData": {}
-    },
-    {
-      "id": "paper",
-      "versionRange": "^1.0.0",
-      "additionalData": {}
-    },
-    {
-      "id": "modloader",
-      "versionRange": "^1.0.2",
-      "additionalData": {}
-    },
-    {
-      "id": "beatsaber-hook",
-      "versionRange": "^3.8.0",
-      "additionalData": {}
-    },
-    {
-      "id": "paper",
-      "versionRange": "^1.2.9",
-      "additionalData": {}
+      "additionalData": {
+        "private": true
+      }
     }
   ],
-  "workspace": null
+  "workspace": {
+    "scripts": {
+      "build": [
+        "pwsh ./build.ps1"
+      ]
+    }
+  }
 }

@@ -34,6 +34,7 @@
 # VSCode config stuff
 !.vscode/c_cpp_properties.json
 !.vscode/tasks.json
+.cache/
 
 # NDK stuff
 out/

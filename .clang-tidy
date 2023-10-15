@@ -1,11 +1,14 @@
-Checks: '*,-llvm*,
+Checks: "*,-llvm*,
   -google-readability-namespace,
   -llvmlib,
-  -fuchsi,
-  -alter,
+  -fuchsia*,
+  -altera*,
+  -cppcoreguidelines-pro-type-union-access,
   -modernize-use-trailing-return,
+  -modernize-use-trailing-return-type,
   -readability-avoid-const-params-in,
   -cppcoreguidelines-macro-usage,
   -readability-identifier-length,
-  -google-readability-todo'
-FormatStyle:     file
+  -cppcoreguidelines-avoid-do-while,
+  -google-readability-todo"
+FormatStyle: file

@@ -15,99 +15,20 @@
       {
         "id": "capstone",
         "versionRange": "^0.1.0",
-        "additionalData": {}
-      },
-      {
-        "id": "paper",
-        "versionRange": "^1.0.0",
-        "additionalData": {}
-      },
-      {
-        "id": "modloader",
-        "versionRange": "^1.0.2",
-        "additionalData": {}
-      },
-      {
-        "id": "beatsaber-hook",
-        "versionRange": "^3.8.0",
-        "additionalData": {}
-      },
-      {
-        "id": "paper",
-        "versionRange": "^1.2.9",
-        "additionalData": {}
+        "additionalData": {
+          "private": true
+        }
       }
     ],
-    "workspace": null
+    "workspace": {
+      "scripts": {
+        "build": [
+          "pwsh ./build.ps1"
+        ]
+      }
+    }
   },
   "restoredDependencies": [
-    {
-      "dependency": {
-        "id": "paper",
-        "versionRange": "=1.2.9",
-        "additionalData": {
-          "soLink": "https://github.com/Fernthedev/paperlog/releases/download/v1.2.9/libpaperlog.so",
-          "debugSoLink": "https://github.com/Fernthedev/paperlog/releases/download/v1.2.9/debug_libpaperlog.so",
-          "overrideSoName": "libpaperlog.so",
-          "modLink": "https://github.com/Fernthedev/paperlog/releases/download/v1.2.9/paperlog.qmod",
-          "branchName": "version-v1.2.9"
-        }
-      },
-      "version": "1.2.9"
-    },
-    {
-      "dependency": {
-        "id": "modloader",
-        "versionRange": "=1.2.3",
-        "additionalData": {
-          "soLink": "https://github.com/sc2ad/QuestLoader/releases/download/v1.2.3/libmodloader64.so",
-          "overrideSoName": "libmodloader.so",
-          "branchName": "version-v1.2.3"
-        }
-      },
-      "version": "1.2.3"
-    },
-    {
-      "dependency": {
-        "id": "libil2cpp",
-        "versionRange": "=0.2.3",
-        "additionalData": {
-          "headersOnly": true
-        }
-      },
-      "version": "0.2.3"
-    },
-    {
-      "dependency": {
-        "id": "beatsaber-hook",
-        "versionRange": "=3.14.0",
-        "additionalData": {
-          "soLink": "https://github.com/sc2ad/beatsaber-hook/releases/download/v3.14.0/libbeatsaber-hook_3_14_0.so",
-          "debugSoLink": "https://github.com/sc2ad/beatsaber-hook/releases/download/v3.14.0/debug_libbeatsaber-hook_3_14_0.so",
-          "branchName": "version-v3.14.0"
-        }
-      },
-      "version": "3.14.0"
-    },
-    {
-      "dependency": {
-        "id": "fmt",
-        "versionRange": "=9.0.0",
-        "additionalData": {
-          "headersOnly": true,
-          "branchName": "version-v9.0.0",
-          "compileOptions": {
-            "systemIncludes": [
-              "fmt/include/"
-            ],
-            "cppFlags": [
-              "-DFMT_HEADER_ONLY"
-            ]
-          }
-        }
-      },
-      "version": "9.0.0"
-    },
     {
       "dependency": {
         "id": "capstone",
