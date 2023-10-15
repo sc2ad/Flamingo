@@ -17,6 +17,13 @@
       "additionalData": {
         "private": true
       }
+    },
+    {
+      "id": "fmt",
+      "versionRange": "^10.0.0",
+      "additionalData": {
+        "private": true
+      }
     }
   ],
   "workspace": {

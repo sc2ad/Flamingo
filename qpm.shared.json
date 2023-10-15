@@ -18,6 +18,13 @@
         "additionalData": {
           "private": true
         }
+      },
+      {
+        "id": "fmt",
+        "versionRange": "^10.0.0",
+        "additionalData": {
+          "private": true
+        }
       }
     ],
     "workspace": {
@@ -29,6 +36,25 @@
     }
   },
   "restoredDependencies": [
+    {
+      "dependency": {
+        "id": "fmt",
+        "versionRange": "=10.0.0",
+        "additionalData": {
+          "headersOnly": true,
+          "branchName": "version/v10_0_0",
+          "compileOptions": {
+            "systemIncludes": [
+              "fmt/include/"
+            ],
+            "cppFlags": [
+              "-DFMT_HEADER_ONLY"
+            ]
+          }
+        }
+      },
+      "version": "10.0.0"
+    },
     {
       "dependency": {
         "id": "capstone",
