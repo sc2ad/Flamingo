@@ -71,10 +71,6 @@ jobs:
           files=( $pattern )
           echo ::set-output name=NAME::"${files[0]}"
 
-      - name: Rename debug
-        run: |
-          mv ./build/debug/${{ steps.libname.outputs.NAME }} ./build/debug/debug_${{ steps.libname.outputs.NAME }}
-
       - name: Create Qmod
         run: |
           pwsh -Command ./createqmod.ps1 ${{env.qmodName}}
@@ -87,7 +83,7 @@ jobs:
           tag_name: ${{ github.event.inputs.version }}
           files: |
             ./build/${{ steps.libname.outputs.NAME }}
-            ./build/debug/debug_${{ steps.libname.outputs.NAME }}
+            ./build/debug_${{ steps.libname.outputs.NAME }}
             ./${{ env.qmodName }}.qmod
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
