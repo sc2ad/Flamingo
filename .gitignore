@@ -44,6 +44,7 @@ out/
 [Oo]bjs/
 ndkpath.txt
 *.zip
+*.txt
 
 # Log files/backups
 *.log
