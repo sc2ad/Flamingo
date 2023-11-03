@@ -18,6 +18,7 @@ struct Trampoline {
     Trampoline(uint32_t* ptr, std::size_t num_insts, std::size_t& sz)
         : address(ptr, &ptr[num_insts]), num_insts(num_insts), pageSizeRef(sz) {}
 
+    // TODO: Move all writes out of this type and instead have them as part of a transparent writer type
     void Write(uint32_t instruction);
     /// @brief Writes the specified pointer as a target specific immediate to the data block.
     /// @param ptr The pointer to write as a raw literal piece of data. NOT dereferenced.
