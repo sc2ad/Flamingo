@@ -549,10 +549,10 @@ void Trampoline::WriteCallback(uint32_t const* target) {
 
 void Trampoline::Finish() {
   auto bytes_to_subtract = (num_insts - instruction_count) * sizeof(uint32_t);
-  pageSizeRef -= bytes_to_subtract;
   FLAMINGO_DEBUG("Completed trampoline allocation of: {} instructions! Out of: {} Subtracting: {} with page size: {}", instruction_count,
                  num_insts, bytes_to_subtract, pageSizeRef);
   FLAMINGO_ASSERT(bytes_to_subtract < pageSizeRef);
+  pageSizeRef -= bytes_to_subtract;
   // Reset memory protection to be r+x to avoid potential overwrites
   constexpr static auto kPageSize = 0x1000ULL;
   auto* page_aligned_target = reinterpret_cast<uint32_t*>(reinterpret_cast<uint64_t>(address.data()) & ~(kPageSize - 1));
