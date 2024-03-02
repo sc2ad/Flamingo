@@ -1,14 +1,25 @@
-Checks: "*,-llvm*,
-  -google-readability-namespace,
-  -llvmlib,
-  -fuchsia*,
-  -altera*,
-  -cppcoreguidelines-pro-type-union-access,
-  -modernize-use-trailing-return,
-  -modernize-use-trailing-return-type,
-  -readability-avoid-const-params-in,
-  -cppcoreguidelines-macro-usage,
+Checks: "clang-diagnostic-*,
+  clang-analyzer-*,
+  fuchsia-statically-constructed-objects,
+  *,
+  -llvmlibc-callee-namespace,
   -readability-identifier-length,
+  -llvmlibc-implementation-in-namespace,
+  -llvmlibc-restrict-system-libc-headers,
+  -llvm-namespace-comment,
+  -llvm-include-order,
+  -altera-*,
+  -fuchsia-*,
+  -modernize-use-trailing-return-type,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -llvm-header-guard,
+  -cppcoreguidelines-macro-usage,
+  -cppcoreguidelines-pro-type-vararg,
   -cppcoreguidelines-avoid-do-while,
-  -google-readability-todo"
+  -hicpp-vararg,
+  -concurrency-mt-unsafe,
+  -abseil-*"
+WarningsAsErrors: true
+HeaderFilterRegex: ""
+AnalyzeTemporaryDtors: false
 FormatStyle: file

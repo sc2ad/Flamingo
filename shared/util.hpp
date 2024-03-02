@@ -3,6 +3,8 @@
 #define FLAMINGO_ID "flamingo"
 #define FLAMINGO_VERSION "0.1.0"
 
+#define FLAMINGO_EXPORT __attribute__((visibility("default")))
+
 #ifdef FLAMINGO_HEADER_ONLY
 
 #ifdef ANDROID

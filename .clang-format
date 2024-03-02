@@ -6,8 +6,9 @@ ColumnLimit: 140
 CommentPragmas: NOLINT:.*
 DerivePointerAlignment: false
 IncludeBlocks: Preserve
-IndentWidth: 4
+IndentWidth: 2
 PointerAlignment: Left
-TabWidth: 4
+TabWidth: 2
 UseTab: Never
 Cpp11BracedListStyle: false
+QualifierAlignment: Right
