@@ -18,6 +18,7 @@ Checks: "clang-diagnostic-*,
   -cppcoreguidelines-avoid-do-while,
   -hicpp-vararg,
   -concurrency-mt-unsafe,
+  -modernize-use-using,
   -abseil-*"
 WarningsAsErrors: true
 HeaderFilterRegex: ""
