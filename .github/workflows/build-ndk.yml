@@ -47,16 +47,21 @@ jobs:
       - name: Get Capstone
         run: pip install capstone==5.0.1 -U --user
 
+      - name: General info
+        run: |
+          python3 --version
+          ls ~/.local/lib/python3.8/site-packages/capstone/include
+
       - name: Build simple test
         run: |
-          clang++ test/main.cpp src/fixups.cpp src/page-allocator.cpp -o build-linux/test -std=c++20 -Ishared -I~/.local/lib/python3.8/site-packages/capstone/include -l:libcapstone.a -Iextern/includes/fmt/fmt/include -L~/.local/lib/python3.8/site-packages/capstone/lib -DFMT_HEADER_ONLY -Wall -Wextra -Werror -g
+          clang++ test/main.cpp src/fixups.cpp src/page-allocator.cpp -o build-linux/test -std=c++20 -Ishared -I$(realpath ~/.local/lib/python3.8/site-packages/capstone/include) -l:libcapstone.a -Iextern/includes/fmt/fmt/include -L$(realpath ~/.local/lib/python3.8/site-packages/capstone/lib) -DFMT_HEADER_ONLY -Wall -Wextra -Werror -g
       
       # Run the test to ensure validity
       - name: Run simple test
         run: ./build-linux/test &> ./build-linux/test-output.txt
 
-      # Upload debug artifact
-      - name: Upload debug artifact
+      # Upload test artifact
+      - name: Upload test artifact
         uses: actions/upload-artifact@v2
         with:
           name: test_output.txt
