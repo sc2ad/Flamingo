@@ -1,4 +1,4 @@
-#include "trampoline.hpp"
+#include "fixups.hpp"
 #include <fmt/core.h>
 #include <sys/mman.h>
 #include <array>
@@ -580,7 +580,7 @@ void Fixups::PerformFixupsAndCallback() {
 }
 
 void Fixups::Log() const {
-  // To log fixups, we
+  // To log fixups, we walk the instructions and perform a translation for each
 }
 
 // TODO: We should consider an optimization where we have a location for fixup data instead of inling all fixups.

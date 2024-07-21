@@ -38,8 +38,8 @@ struct ProtectionWriter {
   }
   // Write data to this writer. Returns the index that we wrote to.
   uint_fast16_t Write(T inst) {
-    if (target_offset > target.addr.size()) {
-      FLAMINGO_ABORT("Cannot write if there is no space available! {} should be <= {}", target_offset,
+    if (target_offset >= target.addr.size()) {
+      FLAMINGO_ABORT("Cannot write if there is no space available! {} should be < {}", target_offset,
                      target.addr.size());
     }
     target.addr[target_offset] = inst;

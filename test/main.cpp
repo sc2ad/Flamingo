@@ -7,9 +7,10 @@
 #include <cstdio>
 #include <span>
 
+#include "../shared/fixups.hpp"
 #include "../shared/page-allocator.hpp"
-#include "../shared/trampoline.hpp"
 #include "capstone/capstone.h"
+
 
 void print_decode_loop(std::span<uint32_t> data) {
   auto handle = flamingo::getHandle();
