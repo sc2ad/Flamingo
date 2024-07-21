@@ -54,6 +54,7 @@ jobs:
       - name: General info
         run: |
           python3 --version
+          clang --version
           ls ~/.local/lib/python3.8/site-packages/capstone/include
 
       - name: Build simple test
