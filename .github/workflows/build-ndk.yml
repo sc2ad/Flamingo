@@ -59,6 +59,7 @@ jobs:
 
       - name: Build simple test
         run: |
+          mkdir -p build-linux
           clang++ test/main.cpp src/fixups.cpp src/page-allocator.cpp -o build-linux/test -std=c++20 -Ishared -I$(realpath ~/.local/lib/python3.8/site-packages/capstone/include) -l:libcapstone.a -Iextern/includes/fmt/fmt/include -L$(realpath ~/.local/lib/python3.8/site-packages/capstone/lib) -DFMT_HEADER_ONLY -Wall -Wextra -Werror -g
       
       # Run the test to ensure validity
