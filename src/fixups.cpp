@@ -148,7 +148,13 @@ struct FixupContext {
     FLAMINGO_DEBUG("Adding 32b data: 0x{:x} at data index: {} for fixup index: {} ({})", data, data_index, fixup_idx,
                    fmt::ptr(&fixup_writer.target.addr[fixup_idx]));
     data_block.push_back(data);
-    data_ref_tags.emplace_back(imm_mask, lshift, rshift, fixup_idx, data_index);
+    data_ref_tags.emplace_back(ImmediateReferenceTag{
+      .imm_mask = imm_mask,
+      .lshift = lshift,
+      .rshift = rshift,
+      .fixup_index = fixup_idx,
+      .data_index = data_index,
+    });
   }
   // When we call WriteData, we are using the previously written fixup as our fixup index. This means, however, that we
   // must have written at least one fixup already.
@@ -161,7 +167,13 @@ struct FixupContext {
                    fixup_idx, fmt::ptr(&fixup_writer.target.addr[fixup_idx]));
     data_block.push_back(large_data & (UINT32_MAX));
     data_block.push_back((large_data >> 32) & UINT32_MAX);
-    data_ref_tags.emplace_back(imm_mask, lshift, rshift, fixup_idx, data_index);
+    data_ref_tags.emplace_back(ImmediateReferenceTag{
+      .imm_mask = imm_mask,
+      .lshift = lshift,
+      .rshift = rshift,
+      .fixup_index = fixup_idx,
+      .data_index = data_index,
+    });
   }
   void WriteLdrWithData(int64_t data, uint_fast8_t reg) {
     // https://developer.arm.com/documentation/ddi0596/2021-12/Base-Instructions/LDR--literal---Load-Register--literal--
@@ -372,7 +384,7 @@ struct FixupContext {
         // Deference SHOULD never cause the instruction being deferred to expand in size.
         // It should always be possible to point the deferred instruction to the new one without emitting more
         // instructions
-        branch_ref_map[target_offset].push_back({
+        branch_ref_map[target_offset].emplace_back(BranchReferenceTag{
           .imm_mask = imm_mask,
           .lshift = lshift,
           .rshift = rshift,
