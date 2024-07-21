@@ -140,7 +140,7 @@ struct FixupContext {
   auto Write(uint32_t inst) {
     return fixup_writer.Write(inst);
   }
-  void WriteData(uint_fast16_t fixup_idx, uint32_t data, uint_fast16_t imm_mask, uint_fast16_t lshift,
+  void WriteData(uint_fast16_t fixup_idx, uint32_t data, uint32_t imm_mask, uint_fast16_t lshift,
                  uint_fast16_t rshift) {
     FLAMINGO_ASSERT(fixup_idx < fixup_writer.target_offset);
     uint_fast16_t data_index = data_block.size();
@@ -152,7 +152,7 @@ struct FixupContext {
   }
   // When we call WriteData, we are using the previously written fixup as our fixup index. This means, however, that we
   // must have written at least one fixup already.
-  void WriteData(uint_fast16_t fixup_idx, uint64_t large_data, uint_fast16_t imm_mask, uint_fast16_t lshift,
+  void WriteData(uint_fast16_t fixup_idx, uint64_t large_data, uint32_t imm_mask, uint_fast16_t lshift,
                  uint_fast16_t rshift) {
     FLAMINGO_ASSERT(fixup_idx < fixup_writer.target_offset);
     uint_fast16_t data_index = data_block.size();
