@@ -15,6 +15,53 @@ env:
   qmodName: flamingo
 
 jobs:
+  test-local:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        name: Checkout
+        with:
+          submodules: true
+
+      - name: Set up Clang
+        uses: egor-tensin/setup-clang@v1
+        with:
+          version: latest
+          platform: x64
+
+      # Get QPM so we can bring in dependencies
+      - name: QPM Rust Action
+        uses: Fernthedev/qpm-action@v1
+        with:
+          #required
+          workflow_token: ${{secrets.GITHUB_TOKEN}}
+
+          restore: true # will run restore on download
+          cache: true #will cache dependencies
+
+      - name: QPM Collapse
+        run: qpm-rust collapse
+
+      # Get the CORRECT version of capstone
+      - name: Get Capstone
+        run: pip install capstone==5.0.1 -U --user
+
+      - name: Build simple test
+        run: |
+          clang++ test/main.cpp src/fixups.cpp src/page-allocator.cpp -o build-linux/test -std=c++20 -Ishared -I~/.local/lib/python3.8/site-packages/capstone/include -l:libcapstone.a -Iextern/includes/fmt/fmt/include -L~/.local/lib/python3.8/site-packages/capstone/lib -DFMT_HEADER_ONLY -Wall -Wextra -Werror -g
+      
+      # Run the test to ensure validity
+      - name: Run simple test
+        run: ./build-linux/test &> ./build-linux/test-output.txt
+
+      # Upload debug artifact
+      - name: Upload debug artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: test_output.txt
+          path: ./build-linux/test-output.txt
+          if-no-files-found: error
   build:
     runs-on: ubuntu-latest
 
