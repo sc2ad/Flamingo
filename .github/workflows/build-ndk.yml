@@ -64,7 +64,7 @@ jobs:
       
       # Run the test to ensure validity
       - name: Run simple test
-        run: ./build-linux/test &> ./build-linux/test-output.txt
+        run: ./build-linux/test &| tee ./build-linux/test-output.txt
 
       # Upload test artifact
       - name: Upload test artifact
