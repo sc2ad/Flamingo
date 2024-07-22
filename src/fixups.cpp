@@ -165,6 +165,7 @@ struct FixupContext {
     // Pointer is known to be little endian
     FLAMINGO_DEBUG("Adding 64b data: 0x{:x} at data index: {} for fixup index: {} ({})", large_data, data_index,
                    fixup_idx, fmt::ptr(&fixup_writer.target.addr[fixup_idx]));
+    // TODO: May need to add some extra logic for making sure 64B data is aligned 8, instead of aligned 4!
     data_block.push_back(large_data & (UINT32_MAX));
     data_block.push_back((large_data >> 32) & UINT32_MAX);
     data_ref_tags.emplace_back(ImmediateReferenceTag{
