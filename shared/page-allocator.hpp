@@ -45,6 +45,7 @@ struct PointerWrapper {
   PageProtectionType protection;
 
   PointerWrapper(std::span<T> addr, PageProtectionType prot) : addr(addr), protection(prot) {}
+  PointerWrapper(PointerWrapper const&) = default;
 
   void Protect() const {
     // If we have nothing in the address, don't bother protecting

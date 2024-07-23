@@ -1,11 +1,18 @@
 #pragma once
 
+#include <asm-generic/mman-common.h>
 #include <fmt/compile.h>
 #include <fmt/core.h>
 #include <fmt/format.h>
+#include <linux/mman.h>
+#include <sys/mman.h>
+#include <sys/user.h>
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <span>
 #include <string>
 #include <string_view>
@@ -159,3 +166,46 @@ struct TestWrapper {
     }
   }
 };
+
+struct TestAllocResult {
+  std::span<uint32_t> target;
+  std::span<uint32_t> fixups;
+};
+
+inline auto alloc_near(std::span<uint32_t> target, size_t fixup_size) {
+  // Alloc 2 pages so we can remap target too
+  auto result = mmap(nullptr, PAGE_SIZE * 2, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  if (result == MAP_FAILED) {
+    perror(strerror(errno));
+  }
+  std::memcpy(result, target.data(), target.size_bytes());
+  return TestAllocResult{
+    .target = std::span<uint32_t>((uint32_t*)result, (uint32_t*)result + target.size()),
+    .fixups = std::span<uint32_t>((uint32_t*)result + PAGE_SIZE / sizeof(uint32_t),
+                                  (uint32_t*)result + PAGE_SIZE / sizeof(uint32_t) + fixup_size),
+  };
+}
+
+inline auto alloc_far(flamingo::PointerWrapper<uint32_t> target_fixups, std::span<uint32_t> data_to_copy) {
+  // Continue fetching pages until we find one that's far enough away from target_fixups
+  // TODO: Cache the found page and give it back each time we call this function
+  // but I don't care enough for that
+  constexpr auto kPageCount = 16384;
+  constexpr auto kRange = 0x800000LL;
+  for (int i = 0; i < kPageCount; i++) {
+    auto result = mmap(nullptr, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    if (result == MAP_FAILED) {
+      perror(strerror(errno));
+      break;
+    }
+    if (std::llabs((int64_t)result - (int64_t)target_fixups.addr.data()) > kRange) {
+      // Found a page we can use
+      std::memcpy(result, data_to_copy.data(), data_to_copy.size_bytes());
+      // Return the new result as a span
+      return std::span<uint32_t>((uint32_t*)result, (uint32_t*)result + data_to_copy.size());
+    }
+  }
+  // If we can't find ANY pages that match this criteria even after trying a bunch, abort
+  ERROR("Could not find any pages (tried: {}) that are outside of the range: {} of: {}", kPageCount, kRange,
+        fmt::ptr(target_fixups.addr.data()));
+}
