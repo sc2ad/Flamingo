@@ -27,6 +27,16 @@
   fmt::print(stderr, "\n");                        \
   std::exit(1);
 
+// Converts a pointer to data into the next 64b multiple for use with tests with differing alignments.
+int64_t round_up8(auto* ptr) {
+  auto value = reinterpret_cast<int64_t>(ptr);
+  if ((value % 8) != 0) {
+    return value + 4;
+  }
+  return value;
+}
+
+// TODO: ALSO ADD A MMAP WRAPPER TO GUARANTEE FAR HOOKS ARE FAR
 // Helper construct to validate data from a hooked target
 struct TestWrapper {
   std::span<uint32_t> data;
@@ -68,6 +78,10 @@ struct TestWrapper {
     return data[idx++];
   }
   uint64_t get_next_big_data() {
+    // If &data[idx] is not aligned 64b, we need to increment index first
+    if ((reinterpret_cast<uint64_t>(&data[idx]) % 8) != 0) {
+      idx++;
+    }
     uint64_t value = static_cast<uint64_t>(get_next_data());
     value |= static_cast<uint64_t>(get_next_data()) << 32U;
     return value;
