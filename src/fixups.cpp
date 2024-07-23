@@ -99,13 +99,22 @@ struct BranchReferenceTag {
   /// @brief Index to overwrite
   uint32_t target_index;
 };
+struct DataEntry {
+  /// @brief The data to hold in this entry
+  uint32_t data;
+  /// @brief The alignment (in multiples of 4 bytes) that we should perform for this entry
+  uint_fast8_t alignment;
+  /// @brief The actual index into the data section this data entry maps to.
+  /// This is only assigned to AFTER all data entries have been added.
+  uint32_t actual_idx{};
+};
 // Holds the context for performing fixups that we don't want to expose to the caller.
 struct FixupContext {
   // The initial target pointer
   std::span<uint32_t const> target;
   flamingo::ProtectionWriter<uint32_t> fixup_writer;
   // Holds sequentially laid out data for usage within fixups
-  std::vector<uint32_t> data_block{};
+  std::vector<DataEntry> data_block{};
   uint_fast16_t data_index = 0;
   // Holds a collection of data elements, which describes which fixups to perform overwrites of after data is allocated
   std::vector<ImmediateReferenceTag> data_ref_tags{};
@@ -147,7 +156,7 @@ struct FixupContext {
     // Pointer is known to be little endian
     FLAMINGO_DEBUG("Adding 32b data: 0x{:x} at data index: {} for fixup index: {} ({})", data, data_index, fixup_idx,
                    fmt::ptr(&fixup_writer.target.addr[fixup_idx]));
-    data_block.push_back(data);
+    data_block.push_back({ .data = data, .alignment = 1 });
     data_ref_tags.emplace_back(ImmediateReferenceTag{
       .imm_mask = imm_mask,
       .lshift = lshift,
@@ -165,9 +174,9 @@ struct FixupContext {
     // Pointer is known to be little endian
     FLAMINGO_DEBUG("Adding 64b data: 0x{:x} at data index: {} for fixup index: {} ({})", large_data, data_index,
                    fixup_idx, fmt::ptr(&fixup_writer.target.addr[fixup_idx]));
-    // TODO: May need to add some extra logic for making sure 64B data is aligned 8, instead of aligned 4!
-    data_block.push_back(large_data & (UINT32_MAX));
-    data_block.push_back((large_data >> 32) & UINT32_MAX);
+    // The first entry is aligned 64, the second entry has 32b alignment.
+    data_block.push_back({ .data = static_cast<uint32_t>(large_data & (UINT32_MAX)), .alignment = 2 });
+    data_block.push_back({ .data = static_cast<uint32_t>((large_data >> 32) & UINT32_MAX), .alignment = 1 });
     data_ref_tags.emplace_back(ImmediateReferenceTag{
       .imm_mask = imm_mask,
       .lshift = lshift,
@@ -578,12 +587,27 @@ void Fixups::PerformFixupsAndCallback() {
   // and marking the start address as "base". Then, we compute offsets based off of base + data_index * sizeof(uint32_t)
   // - &fixups[fixup_idx]
   auto data_base = context.GetFixupPC();
-  for (auto const data : context.data_block) {
-    context.Write(data);
+  for (auto& data : context.data_block) {
+    // Check our location for alignment
+    auto const align_bytes = (data.alignment * sizeof(uint32_t));
+    auto misalignment = context.GetFixupPC() % align_bytes;
+    if (misalignment != 0) {
+      FLAMINGO_DEBUG("MISALIGNED ADDRESS: {:#x} ALIGNING TO: {} REQUIRES: {} BYTES", context.GetFixupPC(), align_bytes,
+                     (align_bytes - misalignment));
+      // Need to write 0s to pad
+      for (size_t i = 0; i < (align_bytes - misalignment); i += sizeof(uint32_t)) {
+        context.Write(0U);
+      }
+    }
+    data.actual_idx = (context.GetFixupPC() - data_base) / sizeof(uint32_t);
+    context.Write(data.data);
   }
   for (auto const& tag : context.data_ref_tags) {
-    int_fast16_t offset = static_cast<int_fast16_t>(data_base + tag.data_index * sizeof(context.data_block[0]) -
+    auto const actual_data_idx = context.data_block[tag.data_index].actual_idx;
+    int_fast16_t offset = static_cast<int_fast16_t>(data_base + actual_data_idx * sizeof(uint32_t) -
                                                     get_untagged_pc(&fixup_inst_destination.addr[tag.fixup_index]));
+    FLAMINGO_DEBUG("ACTUAL DATA INDEX: {} FOR TAG AT FIXUP: {} OFFSET IN BYTES: {} AT: {}", actual_data_idx,
+                   tag.fixup_index, offset, data_base + actual_data_idx * sizeof(uint32_t));
     fixup_inst_destination.addr[tag.fixup_index] = (fixup_inst_destination.addr[tag.fixup_index] & ~tag.imm_mask) |
                                                    (tag.imm_mask & ((offset >> tag.rshift) << tag.lshift));
   }
