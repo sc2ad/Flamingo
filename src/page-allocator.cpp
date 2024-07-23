@@ -8,6 +8,7 @@
 // 2. Shrinking of allocations need to be done in such a way that future allocations are not broken. i.e. bump allocator
 // 3. Deallocations need to be done in such a way that full pages are not destroyed
 #include "page-allocator.hpp"
+#include <fmt/format.h>
 #include <cstddef>
 #include <cstdint>
 #include <unordered_map>
@@ -71,6 +72,7 @@ PointerWrapper<uint32_t> Allocate(uint_fast16_t alignment, uint_fast16_t size, P
                    static_cast<int>(protection), std::strerror(errno));
   }
   auto const page = all_pages->emplace(protection, Page{ .ptr = ptr, .used_size = size, .protection = protection });
+  FLAMINGO_DEBUG("Allocated fixup page with ptr: {} with size: {}", fmt::ptr(ptr), size);
   return PointerWrapper(
       std::span<uint32_t>{ reinterpret_cast<uint32_t*>(&reinterpret_cast<uint8_t*>(page->second.ptr)[0]),
                            reinterpret_cast<uint32_t*>(&reinterpret_cast<uint8_t*>(page->second.ptr)[size]) },

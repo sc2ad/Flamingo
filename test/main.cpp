@@ -31,19 +31,20 @@ static void print_decode_loop(std::span<uint32_t> data) {
   }
 }
 
-static decltype(auto) test_near(uint32_t* target, [[maybe_unused]] uint32_t const* callback) {
+static decltype(auto) test_near(std::span<uint32_t> target, [[maybe_unused]] uint32_t const* callback) {
   constexpr size_t hookSizeNumInsts = 5;
-  constexpr size_t trampolineSize = 64;
-  static std::array<uint32_t, trampolineSize> test_trampoline;
-  printf("TRAMPOLINE: %p\n", test_trampoline.data());
+  constexpr size_t trampolineSize = 32;
+  // First, perform a near allocation to the allocated location
+  auto near_data = alloc_near(target, trampolineSize);
+  fmt::println("NEAR TRAMPOLINE RESULT: {}", fmt::ptr(near_data.fixups.data()));
   flamingo::Fixups fixups{
-    .target = flamingo::PointerWrapper<uint32_t>(std::span<uint32_t>{ target, &target[hookSizeNumInsts - 1] },
-                                                 flamingo::PageProtectionType::kExecute |
-                                                     flamingo::PageProtectionType::kRead |
-                                                     flamingo::PageProtectionType::kWrite),
+    .target = flamingo::PointerWrapper<uint32_t>(
+        std::span(near_data.target.begin(), near_data.target.begin() + hookSizeNumInsts - 1),
+        flamingo::PageProtectionType::kExecute | flamingo::PageProtectionType::kRead |
+            flamingo::PageProtectionType::kWrite),
     .fixup_inst_destination = flamingo::PointerWrapper<uint32_t>(
-        test_trampoline, flamingo::PageProtectionType::kExecute | flamingo::PageProtectionType::kRead |
-                             flamingo::PageProtectionType::kWrite),
+        near_data.fixups, flamingo::PageProtectionType::kExecute | flamingo::PageProtectionType::kRead |
+                              flamingo::PageProtectionType::kWrite),
   };
   fixups.PerformFixupsAndCallback();
   return fixups;
@@ -55,7 +56,7 @@ static auto perform_near_hook_test(std::span<uint8_t> to_hook) {
   printf("TO HOOK: %p\n", to_hook.data());
   print_decode_loop(hook_span);
   puts("TEST NEAR...");
-  auto trampoline_data = test_near(hook_span.data(), (uint32_t const*)(0xDEADBEEFBAADF00DULL));
+  auto trampoline_data = test_near(hook_span, (uint32_t const*)(0xDEADBEEFBAADF00DULL));
   // Use 20 here as a reasonable guesstimate
   print_decode_loop(trampoline_data.fixup_inst_destination.addr);
   puts("HOOKED:");
@@ -63,16 +64,19 @@ static auto perform_near_hook_test(std::span<uint8_t> to_hook) {
   return trampoline_data;
 }
 
-static decltype(auto) test_far(uint32_t* target, [[maybe_unused]] uint32_t const* callback) {
+static decltype(auto) test_far(std::span<uint32_t> target, [[maybe_unused]] uint32_t const* callback) {
   constexpr size_t hookSizeNumInsts = 5;
-  constexpr size_t trampolineSize = 64;
+  constexpr size_t trampolineSize = 32;
   // We allocate the page with r-x perms, we will mark it as writable when we do the writes and otherwise put it back to
   // this state.
   auto fixup_ptr = flamingo::Allocate(16, trampolineSize * sizeof(uint32_t),
                                       flamingo::PageProtectionType::kExecute | flamingo::PageProtectionType::kRead);
+  // To ensure we test far hooks correctly, we copy from target to a page allocated far from fixup_ptr
+  auto actual_target = alloc_far(fixup_ptr, target);
+  fmt::println("FAR TRAMPOLINE RESULT: {}", fmt::ptr(actual_target.data()));
   flamingo::Fixups fixups{
     .target = flamingo::PointerWrapper<uint32_t>(
-        std::span<uint32_t>{ target, &target[hookSizeNumInsts - 1] },
+        std::span(actual_target.begin(), actual_target.begin() + hookSizeNumInsts - 1),
         flamingo::PageProtectionType::kExecute | flamingo::PageProtectionType::kRead),
     .fixup_inst_destination = fixup_ptr,
   };
@@ -89,7 +93,7 @@ static auto perform_far_hook_test(std::span<uint8_t> to_hook) {
   printf("TO HOOK: %p\n", to_hook.data());
   print_decode_loop(hook_span);
   puts("TEST FAR...");
-  auto fixups = test_far(hook_span.data(), (uint32_t const*)(0xDEADBEEFBAADF00DULL));
+  auto fixups = test_far(hook_span, (uint32_t const*)(0xDEADBEEFBAADF00DULL));
   // Use 20 here as a reasonable guesstimate
   print_decode_loop(fixups.fixup_inst_destination.addr);
   puts("HOOKED:");
@@ -204,22 +208,14 @@ static void test_ldr_ldrb_tbnz_bl() {
     TestWrapper fixup_validator(results.fixup_inst_destination.addr, "Near hook ldr/ldrb/tbnz/bl");
     fixup_validator.expect_opc(ARM64_INS_LDR);
     fixup_validator.expect_opc(ARM64_INS_LDRB);
-    // TBNZ should jump over the following instruction if taken
+    // TBNZ should jump straight to the hook location if taken
     // TODO: This test should change once we support near tbz/tbnz optimizations
-    fixup_validator.expect_ops<ARM64_OP_REG, ARM64_OP_IMM, ARM64_OP_IMM>(
-        ARM64_INS_TBNZ, ARM64_REG_W8, 0, (int64_t)&results.fixup_inst_destination.addr[4]);
-    // B instruction should jump to skip the following far branch call
-    fixup_validator.expect_b(&results.fixup_inst_destination.addr[6]);
-    // Far branch call is given by an ldr x17, DATA[0]; br x17
-    fixup_validator.expect_ops<ARM64_OP_REG, ARM64_OP_IMM>(ARM64_INS_LDR, ARM64_REG_X17,
-                                                           round_up8(&results.fixup_inst_destination.addr[8]));
-    fixup_validator.expect_ops<ARM64_OP_REG>(ARM64_INS_BR, ARM64_REG_X17);
+    fixup_validator.expect_ops<ARM64_OP_REG, ARM64_OP_IMM, ARM64_OP_IMM>(ARM64_INS_TBNZ, ARM64_REG_W8, 0,
+                                                                         (int64_t)&results.target.addr[5]);
     fixup_validator.expect_opc(ARM64_INS_MOV);
     // Callback
     fixup_validator.expect_b(&results.target.addr[4]);
     // Data validation
-    // Branch destination for tbnz taken should be hook[5]
-    fixup_validator.expect_big_data((uint64_t)&results.target.addr[5]);
   }
   {
     auto results = perform_far_hook_test(to_hook);
@@ -274,7 +270,7 @@ static void test_adrp() {
     fixup_validator.expect_b(&results.target.addr[4]);
     // Data validation
     // ADRP result must match
-    fixup_validator.expect_big_data((int64_t)(&to_hook[0]) & ~0xfff);
+    fixup_validator.expect_big_data((int64_t)(results.target.addr.data()) & ~0xfff);
   }
   {
     auto results = perform_far_hook_test(to_hook);
@@ -291,7 +287,7 @@ static void test_adrp() {
                                                            round_up8(&results.fixup_inst_destination.addr[8]));
     fixup_validator.expect_ops<ARM64_OP_REG>(ARM64_INS_BR, ARM64_REG_X17);
     // ADRP result must match
-    fixup_validator.expect_big_data((int64_t)(&to_hook[0]) & ~0xfff);
+    fixup_validator.expect_big_data((int64_t)(results.target.addr.data()) & ~0xfff);
     // Check callback point is valid
     fixup_validator.expect_big_data(reinterpret_cast<uint64_t>(&results.target.addr[4]));
   }
