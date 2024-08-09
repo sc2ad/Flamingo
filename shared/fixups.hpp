@@ -49,9 +49,18 @@ struct ProtectionWriter {
   }
 };
 
+struct ShimTarget : PointerWrapper<uint32_t> {
+  /// @brief Holds the original instructions at this target BEFORE a HOOK was written there.
+  /// This is not the same as a Fixups' original_instructions, which are populated across ALL fixups performed.
+  std::vector<uint32_t> original_instructions{};
+  void WriteJump(void* addr);
+};
+
 struct Fixups {
+  /// @brief The number of instructions to typically use for normal fixups
+  constexpr static auto kNormalFixupInstCount = 4U;
   // The location to read as input for fixup writes
-  PointerWrapper<uint32_t> target;
+  ShimTarget target;
   // The location to write fixups to
   PointerWrapper<uint32_t> fixup_inst_destination;
   std::vector<uint32_t> original_instructions{};
