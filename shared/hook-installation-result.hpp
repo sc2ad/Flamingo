@@ -6,6 +6,7 @@
 #include <variant>
 
 #include "calling-convention.hpp"
+#include "hook-metadata.hpp"
 #include "target-data.hpp"
 #include "type-info.hpp"
 
@@ -38,6 +39,24 @@ namespace installation {
 /// @brief Holds metadata about the successful install
 struct Ok {
   HookHandle returned_handle;
+};
+
+/// @brief The general base type for reporting hook errors. Holds the ID of the failing hook.
+struct HookErrorInfo {
+  HookNameMetadata installing_hook;
+  HookErrorInfo(HookNameMetadata const& m) : installing_hook(m) {}
+};
+
+/// @brief An error when the target of a hook install is null.
+struct TargetIsNull : HookErrorInfo {
+  TargetIsNull(HookNameMetadata const& m) : HookErrorInfo(m) {}
+};
+/// @brief An error when the target method is described as too small for the hook strategy being employed.
+struct TargetTooSmall : HookErrorInfo {
+  TargetTooSmall(HookMetadata const& m, uint_fast16_t needed)
+      : HookErrorInfo(m.name_info), actual_num_insts(m.method_num_insts), needed_num_insts(needed) {}
+  uint_fast16_t actual_num_insts;
+  uint_fast16_t needed_num_insts;
 };
 
 // TODO: Should we add the incoming hook IDs?
@@ -96,10 +115,12 @@ struct OptionalErrors {
 
 }  // namespace util
 
-using Error = std::tuple<std::optional<MismatchReturn>, std::optional<MismatchParam>, std::optional<MismatchTargetConv>,
-                         std::optional<MismatchMidpoint>>;
+// Can be one of many cases.
+// The first obvious case is that the target is nullptr
+using Error = std::variant<TargetIsNull>;
 
-using Result = std::variant<Ok, Error>;
+// using Result = std::variant<Ok, Error>;
+using Result = flamingo::Result<Ok, Error>;
 
 template <class T>
 auto& get(Error const& obj) {
@@ -111,28 +132,6 @@ void merge_optional(std::optional<T>& lhs, std::optional<T> const& rhs) {
   if (rhs) {
     lhs.emplace(*rhs);
   }
-}
-
-inline Error& operator|=(Error& lhs, Error const& rhs) {
-  // Merge rhs into lhs for every non-nullopt in rhs
-  std::apply(
-      [&lhs](auto&&... values) {
-        (merge_optional(std::get<std::remove_cvref_t<decltype(values)>>(lhs), std::forward<decltype(values)>(values)),
-         ...);
-      },
-      rhs);
-  return lhs;
-}
-
-inline Result& operator|=(Result& lhs, Result&& rhs) {
-  // TODO: Figure out a good way of merging stuff here
-  // TODO: WHY ARE WE DOING IT THIS WAY
-  if (std::holds_alternative<Ok>(rhs)) {
-    lhs.emplace<Ok>(std::get<Ok>(rhs));
-  } else {
-    lhs.emplace<Error>(std::get<Error>(rhs));
-  }
-  return lhs;
 }
 
 }  // namespace installation

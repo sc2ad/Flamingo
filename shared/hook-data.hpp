@@ -55,6 +55,10 @@ struct HookInfo {
         }) {
   }
 
+  void assign_orig(void* ptr) {
+    if (orig_ptr != nullptr) *orig_ptr = ptr;
+  }
+
   void* target;
   void** orig_ptr;
   void* hook_ptr;

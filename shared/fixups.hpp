@@ -73,6 +73,9 @@ struct Fixups {
   // For the input target, walks over the size passed in to the span
   // For each instruction listed, fixes it up
   void PerformFixupsAndCallback();
+  /// @brief Uninstalls the fixups for this target, rewriting the original instructions back to the target.
+  /// TODO: Eventually this will also clear the allocation at fixup_inst_destination, but for now, we will leak it.
+  void Uninstall();
 };
 
 // TODO: DO NOT EXPOSE THIS SYMBOL (USE IT FOR TESTING ONLY)
