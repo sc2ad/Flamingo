@@ -523,6 +523,45 @@ cs_insn debugInst(uint32_t const* inst) {
   return {};
 }
 
+void ShimTarget::WriteJump(void* address) {
+  FLAMINGO_ASSERT(!addr.empty());
+  original_instructions.resize(addr.size());
+  // TODO: Maybe do a span copy instead of a memcpy here at some point
+  std::memcpy(original_instructions.data(), address, addr.size_bytes());
+
+  // TODO: We also want to correctly report if we were near! Because if so, then we DON'T actually need to fixup all N
+  // instructions, but only need to do 1. So, the return from this should be a number of instructions that we will
+  // DEFINITELY need to fixup for our actual fixups call (if we wish to create fixups)
+
+  // The writer for ensuring correct permissions and also performing the write
+  ProtectionWriter<uint32_t> writer(*this);
+  WriteCallback(writer, reinterpret_cast<uint32_t*>(address));
+}
+
+void ShimTarget::WriteCallback(ProtectionWriter<uint32_t>& writer, uint32_t const* target) {
+  constexpr uint32_t branch_imm_mask = 0b00000011111111111111111111111111U;
+  auto delta = get_untagged_pc(target) - get_untagged_pc(&writer.target.addr[writer.target_offset]);
+  if (std::llabs(delta) > (branch_imm_mask << 1) + 1) {
+    // Too far for b. Emit a br instead.
+    // TODO: Allow for different registers other than just x17
+    // Note: If we change it here, we will also need to change it in the fixups too.
+    constexpr uint32_t ldr_x17 = 0x58000051U;
+    writer.Write(ldr_x17);
+    constexpr uint32_t br_x17 = 0xD61F0220U;
+    writer.Write(br_x17);
+    // And write the target
+    auto large_data = reinterpret_cast<uint64_t>(target);
+    writer.Write(static_cast<uint32_t>(large_data & (UINT32_MAX)));
+    writer.Write(static_cast<uint32_t>((large_data >> 32) & UINT32_MAX));
+  } else {
+    // Small enough to emit a b.
+    // b opcode | encoded immediate (delta >> 2)
+    // Note, abs(delta >> 2) must be < (1 << 26)
+    constexpr uint32_t b_opcode = 0b00010100000000000000000000000000U;
+    writer.Write(b_opcode | ((delta >> 2) & branch_imm_mask));
+  }
+}
+
 void Fixups::PerformFixupsAndCallback() {
   FLAMINGO_ASSERT(!target.addr.empty());
   FLAMINGO_ASSERT(!fixup_inst_destination.addr.empty());
@@ -629,5 +668,8 @@ void Fixups::Log() const {
 // space and THAT could be somewhat tricky. Perhaps a full recompile for a hook is actually preferred, though, if we
 // know we need to leapfrog Since we would need to expand our trampoline and our original instructions regardless.
 // TODO: Consider a full recompile and permit late installations
+
+// If we have a fixup that has a ret, we need to avoid the callback after the ret potentially (though it would be
+// redundant anyways)
 
 }  // namespace flamingo

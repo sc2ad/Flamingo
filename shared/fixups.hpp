@@ -3,7 +3,6 @@
 #include <capstone/capstone.h>
 #include <cstddef>
 #include <cstdint>
-#include <span>
 #include <vector>
 #include "page-allocator.hpp"
 #include "util.hpp"
@@ -54,6 +53,9 @@ struct ShimTarget : PointerWrapper<uint32_t> {
   /// This is not the same as a Fixups' original_instructions, which are populated across ALL fixups performed.
   std::vector<uint32_t> original_instructions{};
   void WriteJump(void* addr);
+
+ private:
+  void WriteCallback(ProtectionWriter<uint32_t>& writer, uint32_t const* target);
 };
 
 struct Fixups {
