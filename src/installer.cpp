@@ -3,19 +3,23 @@
 #include <map>
 #include "util.hpp"
 
+/// @brief This function is assigned to the orig of a hook when the hook in question has no fixups written.
+extern "C" void no_fixups() {
+  FLAMINGO_ABORT(
+      "CALL TO ORIG ON FUNCTION WHERE NO ORIG IS PRESENT! THIS WOULD NORMALLY RESULT IN A REALLY ANNOYING JUMP TO 0!");
+}
 namespace {
 /// @brief The set of all targets hooked. An ordered map so we can perform large-scale walks by doing binary search.
 inline static std::map<flamingo::TargetDescriptor, flamingo::TargetData> targets;
-
-/// @brief This function is assigned to the orig of a hook when the hook in question has no fixups written.
-void no_fixups() {
-  FLAMINGO_ABORT("CALL TO ORIG ON FUNCTION WHERE NO ORIG IS PRESENT WOULD RESULT IN AN EXCEPTION!");
-}
 }  // namespace
 
 namespace flamingo {
 installation::Result Install(HookInfo&& hook) {
-  // The set of all targets of hooks that are installed to
+  // Null targets to install to are prohibited, but null hook functions are allowed (and will most likely cause
+  // horrible crashes when called)
+  if (hook.target == nullptr) {
+    return installation::Result::Err(installation::TargetIsNull{ hook.metadata.name_info });
+  }
   TargetDescriptor target_info{ hook.target };
   auto hooked_target = targets.find(target_info);
   if (hooked_target == targets.end()) {
@@ -23,7 +27,9 @@ installation::Result Install(HookInfo&& hook) {
     // For leapfrog hooks, we need to do something special anyways.
     // TODO: Support leapfrog hooks (where the installation space is fewer than 4U)
     constexpr static auto kInstallSize = Fixups::kNormalFixupInstCount;
-    FLAMINGO_ASSERT(hook.metadata.method_num_insts >= Fixups::kNormalFixupInstCount);
+    if (hook.metadata.method_num_insts >= Fixups::kNormalFixupInstCount) {
+      return installation::Result::Err(installation::TargetTooSmall{ hook.metadata, Fixups::kNormalFixupInstCount });
+    }
     auto target_pointer = PointerWrapper<uint32_t>(
         std::span<uint32_t>(reinterpret_cast<uint32_t*>(hook.target),
                             reinterpret_cast<uint32_t*>(hook.target) + hook.metadata.method_num_insts),
@@ -50,18 +56,17 @@ installation::Result Install(HookInfo&& hook) {
                                                 PageProtectionType::kExecute | PageProtectionType::kRead),
                                  } });
     auto& target_data = result.first->second;
-    *hook.orig_ptr = reinterpret_cast<void*>(&no_fixups);
+    hook.assign_orig(reinterpret_cast<void*>(&no_fixups));
     // If we want to make an orig, we fill it out now
     if (hook.metadata.installation_metadata.need_orig) {
       target_data.orig.PerformFixupsAndCallback();
-      *hook.orig_ptr = target_data.orig.fixup_inst_destination.addr.data();
+      hook.assign_orig(target_data.orig.fixup_inst_destination.addr.data());
     }
     // Add the hook itself to the set of hooks we have, taking ownership
     auto const hook_data_result = target_data.hooks.emplace(target_data.hooks.end(), std::move(hook));
     // Now actually INSTALL the hook at target to point to the first hook in target_data.hooks
     target_data.orig.target.WriteJump(hook_data_result->hook_ptr);
-    return installation::Result{ std::in_place_type_t<installation::Ok>{},
-                                 flamingo::installation::Ok{ HookHandle{ .hook_location = hook_data_result } } };
+    return installation::Result::Ok(flamingo::installation::Ok{ HookHandle{ .hook_location = hook_data_result } });
   } else {
     // Install onto the target, respecting priorities.
     // Note that we may need to recompile some callbacks/fixups to change things
@@ -110,13 +115,14 @@ Result<bool, bool> Uninstall(HookHandle handle) {
   // 3. If this is the last hook, makes the previous hook's orig point to the fixups directly, or to the no_fixups
   // function.
   else if (std::next(handle.hook_location) == target_entry->second.hooks.end()) {
-    *std::prev(handle.hook_location)->orig_ptr = target_entry->second.metadata.metadata.need_orig
-                                                     ? target_entry->second.orig.fixup_inst_destination.addr.data()
-                                                     : reinterpret_cast<void*>(&no_fixups);
+    std::prev(handle.hook_location)
+        ->assign_orig(target_entry->second.metadata.metadata.need_orig
+                          ? target_entry->second.orig.fixup_inst_destination.addr.data()
+                          : reinterpret_cast<void*>(&no_fixups));
   }
   // 4. If this is a hook in the middle, the hook before us's orig will point to the next hook's hook function.
   else {
-    *std::prev(handle.hook_location)->orig_ptr = std::next(handle.hook_location)->hook_ptr;
+    std::prev(handle.hook_location)->assign_orig(std::next(handle.hook_location)->hook_ptr);
   }
   // After all that is done, the iterator is removed from the list of all hooks, and if empty, the entry from the
   // targets map is destroyed. Note that this invalidates all other held HookHandles to the SAME entry. Other entries

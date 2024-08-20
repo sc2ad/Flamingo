@@ -1,6 +1,7 @@
 #pragma once
 #include <fmt/format.h>
 #include <sys/mman.h>
+#include <algorithm>
 #include <cstdint>
 #include <span>
 #include "util.hpp"
@@ -58,6 +59,10 @@ struct PointerWrapper {
                      fmt::ptr(addr.data()), fmt::ptr(page_aligned), page_offset + addr.size_bytes(),
                      static_cast<int>(protection), std::strerror(errno));
     }
+  }
+  /// @brief Returns a subspan that is of the (potentially shrunken) size.
+  PointerWrapper<T> Subspan(size_t n) const {
+    return PointerWrapper(addr.front(std::min(n, addr.size())), protection);
   }
 };
 

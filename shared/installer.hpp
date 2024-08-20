@@ -30,6 +30,7 @@ constexpr static auto kNumFixupsPerInst = 4U;
 [[nodiscard]] Result<bool, installation::Error> Reinstall(TargetDescriptor target);
 
 /// @brief Called on an installed hook to uninstall it from the set of all hooks.
+/// Note that uninstalling a hook never requires a recompile of the set, as no priorities are altered.
 /// Functionally, this behaves as follows:
 /// 1. If it is the only hook, destroys the fixups, uninstalls the hook by replacing the original instructions. Note
 /// that this also destroys leapfrog hooks.
