@@ -659,6 +659,14 @@ void Fixups::Log() const {
   // To log fixups, we walk the instructions and perform a translation for each
 }
 
+void Fixups::Uninstall() {
+  // To perform an uninstall, we just iterate over all of our original instructions and copy them all back to the target
+  ProtectionWriter<uint32_t> writer(target);
+  for (auto const inst : original_instructions) {
+    writer.Write(inst);
+  }
+}
+
 // TODO: We should consider an optimization where we have a location for fixup data instead of inling all fixups.
 // This would allow us to write out actual assembly verbatim and then have ldrs and whatnot for grabbing the data
 // This would save a few instructions per all of the fixups, since we wouldn't need to branch over the data
