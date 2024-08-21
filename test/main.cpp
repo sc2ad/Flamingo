@@ -38,10 +38,10 @@ static decltype(auto) test_near(std::span<uint32_t> target, [[maybe_unused]] uin
   auto near_data = alloc_near(target, trampolineSize);
   fmt::println("NEAR TRAMPOLINE RESULT: {}", fmt::ptr(near_data.fixups.data()));
   flamingo::Fixups fixups{
-    .target = flamingo::PointerWrapper<uint32_t>(
-        std::span(near_data.target.begin(), near_data.target.begin() + hookSizeNumInsts - 1),
-        flamingo::PageProtectionType::kExecute | flamingo::PageProtectionType::kRead |
-            flamingo::PageProtectionType::kWrite),
+    .target = { flamingo::PointerWrapper<uint32_t>{
+      std::span(near_data.target.begin(), near_data.target.begin() + hookSizeNumInsts - 1),
+      flamingo::PageProtectionType::kExecute | flamingo::PageProtectionType::kRead |
+          flamingo::PageProtectionType::kWrite } },
     .fixup_inst_destination = flamingo::PointerWrapper<uint32_t>(
         near_data.fixups, flamingo::PageProtectionType::kExecute | flamingo::PageProtectionType::kRead |
                               flamingo::PageProtectionType::kWrite),
@@ -75,9 +75,9 @@ static decltype(auto) test_far(std::span<uint32_t> target, [[maybe_unused]] uint
   auto actual_target = alloc_far(fixup_ptr, target);
   fmt::println("FAR TRAMPOLINE RESULT: {}", fmt::ptr(actual_target.data()));
   flamingo::Fixups fixups{
-    .target = flamingo::PointerWrapper<uint32_t>(
-        std::span(actual_target.begin(), actual_target.begin() + hookSizeNumInsts - 1),
-        flamingo::PageProtectionType::kExecute | flamingo::PageProtectionType::kRead),
+    .target = { flamingo::PointerWrapper<uint32_t>{
+      std::span(actual_target.begin(), actual_target.begin() + hookSizeNumInsts - 1),
+      flamingo::PageProtectionType::kExecute | flamingo::PageProtectionType::kRead } },
     .fixup_inst_destination = fixup_ptr,
   };
   printf("TRAMPOLINE: %p\n", &fixup_ptr.addr[0]);
