@@ -29,7 +29,7 @@ option(TEST_BUILD "Enable local executable test builds for sanity checks" ON)
 if (TEST_BUILD)
     project(flamingo-test)
 
-    # Fetcj capstone (v5.0.1) via: pip install capstone==5.0.1 -U --user
+    # Fetch capstone (v5.0.1) via: pip install capstone==5.0.1 -U --user
     include(FetchContent)
     FetchContent_Declare(
         capstone
