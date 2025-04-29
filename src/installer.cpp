@@ -1,6 +1,12 @@
 #include "installer.hpp"
 #include <iterator>
+#include <list>
 #include <map>
+#include <variant>
+#include "hook-data.hpp"
+#include "hook-installation-result.hpp"
+#include "hook-metadata.hpp"
+#include "target-data.hpp"
 #include "util.hpp"
 
 /// @brief This function is assigned to the orig of a hook when the hook in question has no fixups written.
@@ -14,6 +20,27 @@ inline static std::map<flamingo::TargetDescriptor, flamingo::TargetData> targets
 }  // namespace
 
 namespace flamingo {
+Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_suitable_priority_location_for(std::list<HookInfo>& hooks, HookPriority priority) {
+  // Install onto the target, respecting priorities.
+  // Note that we may need to recompile some callbacks/fixups to change things
+  // 1. Topological sort on our hooks that exist here by priority
+  // - Find a suitable location where we can fit (note that we MAY need to recompile and move hooks around in order to do this)
+  // - First, walk all the hooks for a viable location, if we can find one. If we cannot, then we have to recompile hooks.
+  // TODO: Above
+  static_cast<void>(priority);
+  return Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities>::Ok(hooks.begin());
+}
+
+Result<std::monostate, installation::TargetMismatch> validate_install_metadata(TargetMetadata& existing, HookMetadata const& incoming) {
+  // TODO: At this point, we should be double checking metadata.
+  // 1. Take the min of num_insts/verify they are equivalent
+  // 2. Validate calling convention matches
+  // 3. Ensure parameter_info and return_info are matching (ifdef guarded)
+  static_cast<void>(existing);
+  static_cast<void>(incoming);
+  return Result<std::monostate, installation::TargetMismatch>::Ok();
+}
+
 installation::Result Install(HookInfo&& hook) {
   // Null targets to install to are prohibited, but null hook functions are allowed (and will most likely cause
   // horrible crashes when called)
@@ -28,7 +55,7 @@ installation::Result Install(HookInfo&& hook) {
     // TODO: Support leapfrog hooks (where the installation space is fewer than 4U)
     constexpr static auto kInstallSize = Fixups::kNormalFixupInstCount;
     if (hook.metadata.method_num_insts >= Fixups::kNormalFixupInstCount) {
-      return installation::Result::Err(installation::TargetTooSmall{ hook.metadata, Fixups::kNormalFixupInstCount });
+      return installation::Result::ErrAt<installation::TargetTooSmall>(hook.metadata, Fixups::kNormalFixupInstCount);
     }
     auto target_pointer = PointerWrapper<uint32_t>(
         std::span<uint32_t>(reinterpret_cast<uint32_t*>(hook.target),
@@ -46,7 +73,7 @@ installation::Result Install(HookInfo&& hook) {
                                        .return_info = hook.metadata.return_info,
 #endif
                                      },
-                                 .orig = Fixups{
+                                 .fixups = Fixups{
                                    // Our fixup target is a subspan the same size as our install size
                                    .target = { target_pointer.Subspan(kInstallSize) },
                                    .fixup_inst_destination =
@@ -59,19 +86,42 @@ installation::Result Install(HookInfo&& hook) {
     hook.assign_orig(reinterpret_cast<void*>(&no_fixups));
     // If we want to make an orig, we fill it out now
     if (hook.metadata.installation_metadata.need_orig) {
-      target_data.orig.PerformFixupsAndCallback();
-      hook.assign_orig(target_data.orig.fixup_inst_destination.addr.data());
+      target_data.fixups.PerformFixupsAndCallback();
+      hook.assign_orig(target_data.fixups.fixup_inst_destination.addr.data());
     }
     // Add the hook itself to the set of hooks we have, taking ownership
     auto const hook_data_result = target_data.hooks.emplace(target_data.hooks.end(), std::move(hook));
     // Now actually INSTALL the hook at target to point to the first hook in target_data.hooks
-    target_data.orig.target.WriteJump(hook_data_result->hook_ptr);
+    target_data.fixups.target.WriteJump(hook_data_result->hook_ptr);
     return installation::Result::Ok(flamingo::installation::Ok{ HookHandle{ .hook_location = hook_data_result } });
-  } else {
-    // Install onto the target, respecting priorities.
-    // Note that we may need to recompile some callbacks/fixups to change things
-    return installation::Result{ std::in_place_type_t<installation::Error>{}, {} };
   }
+  auto installation_checks = validate_install_metadata(hooked_target->second.metadata, hook.metadata);
+  if (!installation_checks.has_value()) {
+    return installation::Result::ErrAt<installation::TargetMismatch>(installation_checks.error());
+  }
+
+  auto location_or_err = find_suitable_priority_location_for(hooked_target->second.hooks, hook.metadata.priority);
+  if (!location_or_err.has_value()) {
+    return installation::Result::ErrAt<installation::TargetBadPriorities>(location_or_err.error());
+  }
+  auto const location = location_or_err.value();
+  // 2. Assuming we found a reasonable location to install, insert our new hook before this location, and then adjust those around us to match.
+  auto const hook_data_result = hooked_target->second.hooks.emplace(location, std::move(hook));
+  // - This is done by looking to the left and right of our target iterator to insert at:
+  // -- If left does not exist: Rewrite the jump from the target to us; else rewrite the left's orig final jump to us
+  if (hook_data_result == hooked_target->second.hooks.begin()) {
+    hooked_target->second.fixups.target.WriteJump(hook_data_result->hook_ptr);
+  } else {
+    std::prev(hook_data_result)->assign_orig(hook_data_result->hook_ptr);
+  }
+  // -- If right does not exist: OUR orig calls the overall fixups; else jump to their hook_ptr
+  if (std::next(hook_data_result) == hooked_target->second.hooks.end()) {
+    hook_data_result->assign_orig(hooked_target->second.fixups.fixup_inst_destination.addr.data());
+  } else {
+    hook_data_result->assign_orig(std::next(hook_data_result)->hook_ptr);
+  }
+  // TODO: Make assign_orig calls respect if we actually want an orig or not and add tests for this
+  return installation::Result::Ok(flamingo::installation::Ok{ HookHandle{ .hook_location = hook_data_result } });
 }
 
 Result<bool, installation::Error> Reinstall(TargetDescriptor target) {
@@ -82,10 +132,13 @@ Result<bool, installation::Error> Reinstall(TargetDescriptor target) {
   }
   // Reinstall the orig by calling PerformFixupsAndCallback() again (as needed)
   if (itr->second.metadata.metadata.need_orig) {
-    itr->second.orig.PerformFixupsAndCallback();
+    itr->second.fixups.PerformFixupsAndCallback();
   }
   // Perform the write of the jump to the first hook
-  itr->second.orig.target.WriteJump(itr->second.hooks.begin()->hook_ptr);
+  itr->second.fixups.target.WriteJump(itr->second.hooks.begin()->hook_ptr);
+  // Note that we do NOT reconstruct all of the inner hook pointers between each hook.
+  // This is done as a partial optimization, but at some point we should revisit this (and adjust the docstring comment to match)
+  // TODO: Above
   return RetType::Ok(true);
 }
 
@@ -99,7 +152,7 @@ Result<bool, bool> Uninstall(HookHandle handle) {
   // 1. If it is the only hook, destroys the fixups, uninstalls the hook by replacing the original instructions. Note
   // that this also destroys leapfrog hooks.
   if (target_entry->second.hooks.size() == 1) {
-    target_entry->second.orig.Uninstall();
+    target_entry->second.fixups.Uninstall();
     // At this point the original memory at our target is restored, we are safe to clear out the target entry here and
     // return
     // TODO: Invalidate leapfrog entries
@@ -110,14 +163,14 @@ Result<bool, bool> Uninstall(HookHandle handle) {
   // 2. If this is the first hook in a set of many, rewrites the target to jump to the hook past this one. Note that
   // this MAY also break leapfrog hooks, if this hook was installed as a branch but the next hook needs to be larger.
   if (handle.hook_location == target_entry->second.hooks.begin()) {
-    target_entry->second.orig.target.WriteJump(std::next(handle.hook_location)->hook_ptr);
+    target_entry->second.fixups.target.WriteJump(std::next(handle.hook_location)->hook_ptr);
   }
   // 3. If this is the last hook, makes the previous hook's orig point to the fixups directly, or to the no_fixups
   // function.
   else if (std::next(handle.hook_location) == target_entry->second.hooks.end()) {
     std::prev(handle.hook_location)
         ->assign_orig(target_entry->second.metadata.metadata.need_orig
-                          ? target_entry->second.orig.fixup_inst_destination.addr.data()
+                          ? target_entry->second.fixups.fixup_inst_destination.addr.data()
                           : reinterpret_cast<void*>(&no_fixups));
   }
   // 4. If this is a hook in the middle, the hook before us's orig will point to the next hook's hook function.

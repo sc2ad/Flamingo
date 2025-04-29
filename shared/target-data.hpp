@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <list>
 #include <optional>
 
@@ -25,12 +26,16 @@ struct TargetMetadata {
 #endif
 };
 
+inline bool operator<(TargetDescriptor const& lhs, TargetDescriptor const& rhs) {
+  return reinterpret_cast<uintptr_t>(lhs.target) < reinterpret_cast<uintptr_t>(rhs.target);
+}
+
 /// @brief Represents the status of a particular address
 /// If hooked, will contain the same members as a hook, but additionally with a list of Hooks
 /// The idea being we can O(1) install hooks (and uninstall via iterator)
 struct TargetData {
   TargetMetadata metadata;
-  Fixups orig;
+  Fixups fixups;
   std::list<HookInfo> hooks{};
 };
 

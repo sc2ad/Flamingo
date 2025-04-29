@@ -12,16 +12,32 @@
 
 namespace flamingo {
 
+template<class T>
+struct is_variant {
+  constexpr static bool value = false;
+};
+
+template<class... TArgs>
+struct is_variant<std::variant<TArgs...>> {
+  constexpr static bool value = true;
+};
+
 template <class T, class E>
 struct Result {
   std::variant<E, T> data;
   template <class... TArgs>
   static Result Ok(TArgs&&... args) {
-    return Result{ std::in_place_index_t<1>{}, std::forward<TArgs>(args)... };
+    return Result{ std::variant<E, T>(std::in_place_index_t<1>{}, std::forward<TArgs>(args)...) };
   }
   template <class... TArgs>
   static Result Err(TArgs&&... args) {
-    return Result{ std::in_place_index_t<0>{}, std::forward<TArgs>(args)... };
+    return Result{ std::variant<E, T>(std::in_place_index_t<0>{}, std::forward<TArgs>(args)...) };
+  }
+  // Helper function for if E is a variant (we have multiple errors and need to construct one)
+  template<class ET, class... TArgs>
+  requires (is_variant<E>::value)
+  static Result ErrAt(TArgs&&... args) {
+    return Result{ std::variant<E, T>(std::in_place_index_t<0>{}, E(std::in_place_type_t<ET>{}, std::forward<TArgs>(args)...))};
   }
   T const& value() const {
     return std::get<1>(data);
@@ -57,6 +73,15 @@ struct TargetTooSmall : HookErrorInfo {
       : HookErrorInfo(m.name_info), actual_num_insts(m.method_num_insts), needed_num_insts(needed) {}
   uint_fast16_t actual_num_insts;
   uint_fast16_t needed_num_insts;
+};
+/// @brief An error when the target method is impossible to install given its priorities and other hooks to install it onto.
+struct TargetBadPriorities : HookErrorInfo {
+  // TODO: Add a bunch of stuff here
+  TargetBadPriorities(HookMetadata const& m) : HookErrorInfo(m.name_info) {}
+};
+/// @brief An error when the target method has some validation failure with respect to the metadata it holds.
+struct TargetMismatch : HookErrorInfo {
+  TargetMismatch(HookMetadata const& m) : HookErrorInfo(m.name_info) {}
 };
 
 // TODO: Should we add the incoming hook IDs?
@@ -116,10 +141,8 @@ struct OptionalErrors {
 }  // namespace util
 
 // Can be one of many cases.
-// The first obvious case is that the target is nullptr
-using Error = std::variant<TargetIsNull>;
+using Error = std::variant<TargetIsNull, TargetBadPriorities, TargetMismatch, TargetTooSmall>;
 
-// using Result = std::variant<Ok, Error>;
 using Result = flamingo::Result<Ok, Error>;
 
 template <class T>
