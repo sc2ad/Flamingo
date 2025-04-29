@@ -295,6 +295,7 @@ static void test_adrp() {
 
 // TODO: Test a case where we have a loop in the first 4 instructions
 // TODO: Test a case where we have an ldr literal that loads from within fixup range
+// TODO: Test a case with a negative adrp offset
 
 int main() {
   test_no_fixups();

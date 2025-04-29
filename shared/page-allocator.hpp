@@ -62,7 +62,7 @@ struct PointerWrapper {
   }
   /// @brief Returns a subspan that is of the (potentially shrunken) size.
   PointerWrapper<T> Subspan(size_t n) const {
-    return PointerWrapper(addr.front(std::min(n, addr.size())), protection);
+    return PointerWrapper(addr.first(std::min(n, addr.size())), protection);
   }
 };
 
