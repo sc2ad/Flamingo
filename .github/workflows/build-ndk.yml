@@ -24,15 +24,13 @@ jobs:
         with:
           submodules: true
 
+      - uses: seanmiddleditch/gha-setup-ninja@v3
+
       - name: Set up Clang
         uses: egor-tensin/setup-clang@v1
         with:
           version: latest
           platform: x64
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.8'
 
       # Get QPM so we can bring in dependencies
       - name: QPM Rust Action
@@ -47,32 +45,25 @@ jobs:
       - name: QPM Collapse
         run: qpm-rust collapse
 
-      # Get the CORRECT version of capstone
-      - name: Get Capstone
-        run: pip install capstone==5.0.1 -U --user
-
-      - name: General info
+      - name: CMake with LOCAL_TEST enabled
         run: |
-          python3 --version
-          clang --version
-          ls ~/.local/lib/python3.8/site-packages/capstone/include
+          CC=clang CXX=clang cmake -B build -DTEST_BUILD=1 -GNinja
 
-      - name: Build simple test
+      - name: Build
         run: |
-          mkdir -p build-linux
-          clang++ test/main.cpp src/fixups.cpp src/page-allocator.cpp -o build-linux/test -std=c++20 -Ishared -I$(realpath ~/.local/lib/python3.8/site-packages/capstone/include) -l:libcapstone.a -Iextern/includes/fmt/fmt/include -L$(realpath ~/.local/lib/python3.8/site-packages/capstone/lib) -DFMT_HEADER_ONLY -Wall -Wextra -Werror -g
-      
+          ninja -C build
+ 
       # Run the test to ensure validity
       - name: Run simple test
-        run: ./build-linux/test 2>&1 | tee ./build-linux/test-output.txt
+        run: ./build/fixup-test 2>&1 | tee ./build/test-output.txt
 
       # Upload test artifact
       - name: Upload test artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test_output.txt
-          path: ./build-linux/test-output.txt
+          path: ./build/test-output.txt
           if-no-files-found: error
   build:
     runs-on: ubuntu-latest
@@ -125,21 +116,21 @@ jobs:
           echo ::set-output name=NAME::"${files[0]}"
 
       - name: Upload non-debug artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.libname.outputs.NAME }}
           path: ./build/${{ steps.libname.outputs.NAME }}
           if-no-files-found: error
 
       - name: Upload debug artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: debug_${{ steps.libname.outputs.NAME }}
           path: ./build/debug_${{ steps.libname.outputs.NAME }}
           if-no-files-found: error
 
       - name: Upload qmod artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: ${{env.qmodName}}.qmod
           path: ./${{ env.qmodName }}.qmod
