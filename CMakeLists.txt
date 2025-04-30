@@ -49,6 +49,9 @@ if (TEST_BUILD)
 
     add_executable(fixup-test ${CMAKE_CURRENT_SOURCE_DIR}/test/main.cpp)
     target_link_libraries(fixup-test PRIVATE flamingo-static)
+
+    add_executable(api-test ${CMAKE_CURRENT_SOURCE_DIR}/test/api.cpp)
+    target_link_libraries(api-test PRIVATE flamingo-static)
 else()
     MESSAGE(ERROR "No NDK support yet! Try using -DTEST_BUILD=ON")
 endif()
