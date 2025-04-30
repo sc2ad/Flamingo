@@ -46,10 +46,10 @@ int64_t round_up8(auto* ptr) {
 // TODO: ALSO ADD A MMAP WRAPPER TO GUARANTEE FAR HOOKS ARE FAR
 // Helper construct to validate data from a hooked target
 struct TestWrapper {
-  std::span<uint32_t> data;
+  std::span<uint32_t const> data;
   uint32_t idx{ 0 };
   std::string test_name;
-  TestWrapper(std::span<uint32_t> bytes, std::string_view test) : data(bytes), test_name(test) {
+  TestWrapper(std::span<uint32_t const> bytes, std::string_view test) : data(bytes), test_name(test) {
     start_test();
   }
   TestWrapper(std::span<uint8_t> bytes, std::string_view test)
@@ -208,4 +208,18 @@ inline auto alloc_far(flamingo::PointerWrapper<uint32_t> target_fixups, std::spa
   // If we can't find ANY pages that match this criteria even after trying a bunch, abort
   ERROR("Could not find any pages (tried: {}) that are outside of the range: {} of: {}", kPageCount, kRange,
         fmt::ptr(target_fixups.addr.data()));
+}
+
+inline void print_decode_loop(std::span<uint32_t const> data) {
+  auto handle = flamingo::getHandle();
+  for (size_t i = 0; i < data.size(); i++) {
+    cs_insn* insns = nullptr;
+    auto count = cs_disasm(handle, reinterpret_cast<uint8_t const*>(&data[i]), sizeof(uint32_t),
+                           reinterpret_cast<uint64_t>(&data[i]), 1, &insns);
+    if (count == 1) {
+      printf("Addr: %p Value: 0x%08x, %s %s\n", &data[i], data[i], insns[0].mnemonic, insns[0].op_str);
+    } else {
+      printf("Addr: %p Value: 0x%08x\n", &data[i], data[i]);
+    }
+  }
 }

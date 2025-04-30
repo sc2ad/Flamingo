@@ -17,20 +17,6 @@
 #include "capstone/capstone.h"
 #include "test-wrapper.hpp"
 
-static void print_decode_loop(std::span<uint32_t> data) {
-  auto handle = flamingo::getHandle();
-  for (size_t i = 0; i < data.size(); i++) {
-    cs_insn* insns = nullptr;
-    auto count = cs_disasm(handle, reinterpret_cast<uint8_t const*>(&data[i]), sizeof(uint32_t),
-                           reinterpret_cast<uint64_t>(&data[i]), 1, &insns);
-    if (count == 1) {
-      printf("Addr: %p Value: 0x%08x, %s %s\n", &data[i], data[i], insns[0].mnemonic, insns[0].op_str);
-    } else {
-      printf("Addr: %p Value: 0x%08x\n", &data[i], data[i]);
-    }
-  }
-}
-
 static decltype(auto) test_near(std::span<uint32_t> target, [[maybe_unused]] uint32_t const* callback) {
   constexpr size_t hookSizeNumInsts = 5;
   constexpr size_t trampolineSize = 32;
@@ -46,6 +32,7 @@ static decltype(auto) test_near(std::span<uint32_t> target, [[maybe_unused]] uin
         near_data.fixups, flamingo::PageProtectionType::kExecute | flamingo::PageProtectionType::kRead |
                               flamingo::PageProtectionType::kWrite),
   };
+  fixups.CopyOriginalInsts();
   fixups.PerformFixupsAndCallback();
   return fixups;
 }
@@ -83,6 +70,7 @@ static decltype(auto) test_far(std::span<uint32_t> target, [[maybe_unused]] uint
   printf("TRAMPOLINE: %p\n", &fixup_ptr.addr[0]);
   // Attempt to write a hook from target --> callback (just for testing purposes)
   // Hook size is 5, but we only fixup 4
+  fixups.CopyOriginalInsts();
   fixups.PerformFixupsAndCallback();
   return fixups;
 }
