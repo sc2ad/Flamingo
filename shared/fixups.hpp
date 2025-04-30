@@ -67,6 +67,10 @@ struct Fixups {
   PointerWrapper<uint32_t> fixup_inst_destination;
   std::vector<uint32_t> original_instructions{};
 
+  /// @brief Copies over the original instructions from target to the original_instructions set.
+  /// Required before calling PerformFixupsAndCallback, and generally required for uninstallable hooks.
+  void CopyOriginalInsts();
+
   /// @brief Logs various information about the fixups.
   /// Will log the original instructions and the full set of fixups, including data, for the full allocation window
   void Log() const;
