@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 
 #include "calling-convention.hpp"
 #include "hook-metadata.hpp"
@@ -10,41 +11,41 @@ namespace flamingo {
 /// @brief Represents a hook that a user of this library will use.
 /// On install, we collect this information into a single TargetInfo structure, which contains a collection of multiple
 /// Hook references. We map target --> TargetInfo and every time we have a new hook installed there, we move orig
-/// pointers around accordingly. To do priorities, we have to track that state within a given Hook We don't necessarily
-/// need O(1) hook installation, but we could. A TargetInfo may basically just be a Hook, except with the added list of
-/// Hooks, which we use to validate.
+/// pointers around accordingly. To do priorities, we have to track that state within a given TargetInfo's hooks to
+/// determine a suitable location to install.
 struct HookInfo {
   // TODO: friend struct this to something?
   friend struct TargetData;
   template <class R, class... TArgs>
   using HookFuncType = R (*)(TArgs...);
 
-  /// @brief The default number of instructions to install a hook with
-  constexpr static uint16_t kDefaultNumInsts = 10U;
+  /// @brief The default number of instructions a target has
+  constexpr static uint16_t kDefaultNumInsts = 5U;
 
+  // Helper constructor for the bare minimum
   template <class R, class... TArgs>
-  HookInfo(HookFuncType<R, TArgs...> hook_func, void* target, HookFuncType<R, TArgs...>* orig_ptr = nullptr,
-           uint16_t num_insts = kDefaultNumInsts, CallingConvention conv = CallingConvention::Cdecl,
-           HookNameMetadata&& name_info =
-               HookNameMetadata{
-                 .name = "",
-               },
-           HookPriority&& priority =
-               HookPriority{
-                 .befores = {},
-                 .afters = {},
-               },
-           bool is_midpoint = false)
+  HookInfo(HookFuncType<R, TArgs...> hook_func, void* target, HookFuncType<R, TArgs...>* orig_ptr)
+      : HookInfo(hook_func, target, orig_ptr, kDefaultNumInsts, CallingConvention::Cdecl,
+                 HookNameMetadata{ .name = "" }, HookPriority{}, InstallationMetadata{}) {}
+
+  // Helper function to make it really easy to set installation metadata
+  template <class R, class... TArgs>
+  HookInfo(HookFuncType<R, TArgs...> hook_func, void* target, HookFuncType<R, TArgs...>* orig_ptr,
+           InstallationMetadata&& metadata)
+      : HookInfo(hook_func, target, orig_ptr, kDefaultNumInsts, CallingConvention::Cdecl,
+                 HookNameMetadata{ .name = "" }, HookPriority{}, std::forward<InstallationMetadata>(metadata)) {}
+
+  // TODO: Do we want to allow for specific register overrides instead of x17? For allowing for clever midpoint hooks?
+  template <class R, class... TArgs>
+  HookInfo(HookFuncType<R, TArgs...> hook_func, void* target, HookFuncType<R, TArgs...>* orig_ptr, uint16_t num_insts,
+           CallingConvention conv, HookNameMetadata&& name_info, HookPriority&& priority,
+           InstallationMetadata&& install_metadata)
       : target(target),
-        orig_ptr(orig_ptr),
-        hook_ptr(hook_func),
+        orig_ptr(reinterpret_cast<void**>(orig_ptr)),
+        hook_ptr(reinterpret_cast<void*>(hook_func)),
         metadata(HookMetadata{
           .convention = conv,
-          .metadata =
-              InstallationMetadata{
-                .need_orig = orig_ptr != nullptr,
-                .is_midpoint = is_midpoint,
-              },
+          .installation_metadata = install_metadata,
           .method_num_insts = num_insts,
           .name_info = name_info,
           .priority = priority,

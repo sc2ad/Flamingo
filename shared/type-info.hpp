@@ -17,6 +17,10 @@ struct TypeInfo {
       return TypeInfo{
         .size = sizeof(void*),
       };
+    } else if constexpr (std::is_void_v<T>) {
+      return TypeInfo{
+        .size = 0,
+      };
     } else {
       return TypeInfo{
         .size = sizeof(T),

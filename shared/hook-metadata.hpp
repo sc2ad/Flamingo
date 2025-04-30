@@ -14,6 +14,8 @@ struct TargetData;
 struct InstallationMetadata {
   bool need_orig;
   bool is_midpoint;
+  /// @brief If write protection should be enabled for the target address (primarily for debugging to avoid issues with near pages)
+  bool write_prot;
 };
 
 /// @brief Describes the name metadata of the hook, used for lookups and priorities.
