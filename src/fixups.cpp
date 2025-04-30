@@ -525,10 +525,6 @@ cs_insn debugInst(uint32_t const* inst) {
 
 void ShimTarget::WriteJump(void* address) {
   FLAMINGO_ASSERT(!addr.empty());
-  original_instructions.resize(addr.size());
-  // TODO: Maybe do a span copy instead of a memcpy here at some point
-  std::memcpy(original_instructions.data(), address, addr.size_bytes());
-
   // TODO: We also want to correctly report if we were near! Because if so, then we DON'T actually need to fixup all N
   // instructions, but only need to do 1. So, the return from this should be a number of instructions that we will
   // DEFINITELY need to fixup for our actual fixups call (if we wish to create fixups)
@@ -562,11 +558,17 @@ void ShimTarget::WriteCallback(ProtectionWriter<uint32_t>& writer, uint32_t cons
   }
 }
 
+void Fixups::CopyOriginalInsts() {
+  FLAMINGO_ASSERT(!target.addr.empty());
+  original_instructions.resize(target.addr.size());
+  std::copy(target.addr.begin(), target.addr.end(), original_instructions.begin());
+}
+
 void Fixups::PerformFixupsAndCallback() {
   FLAMINGO_ASSERT(!target.addr.empty());
   FLAMINGO_ASSERT(!fixup_inst_destination.addr.empty());
-  original_instructions.resize(target.addr.size());
-  std::copy(target.addr.begin(), target.addr.end(), original_instructions.begin());
+  // As a precondition to this call, we must ensure we copied over the original instructions
+  FLAMINGO_ASSERT(original_instructions.size() >= target.addr.size());
   // TODO: It is not thread safe to perform hooks on the same page as other threads!
   // This is because we could have a fixup writer complete on one thread after the other has started.
   // So, we want to lock on hook creation to ensure no one else is doing any type of hook creation, ideally.
