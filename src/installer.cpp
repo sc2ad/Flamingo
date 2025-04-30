@@ -1,11 +1,15 @@
 #include "installer.hpp"
+#include <cstdint>
 #include <iterator>
 #include <list>
 #include <map>
+#include <span>
 #include <variant>
+#include "fixups.hpp"
 #include "hook-data.hpp"
 #include "hook-installation-result.hpp"
 #include "hook-metadata.hpp"
+#include "page-allocator.hpp"
 #include "target-data.hpp"
 #include "util.hpp"
 
@@ -15,11 +19,11 @@ extern "C" void no_fixups() {
       "CALL TO ORIG ON FUNCTION WHERE NO ORIG IS PRESENT! THIS WOULD NORMALLY RESULT IN A REALLY ANNOYING JUMP TO 0!");
 }
 namespace {
-/// @brief The set of all targets hooked. An ordered map so we can perform large-scale walks by doing binary search.
-inline static std::map<flamingo::TargetDescriptor, flamingo::TargetData> targets;
-}  // namespace
+using namespace flamingo;
 
-namespace flamingo {
+/// @brief The set of all targets hooked. An ordered map so we can perform large-scale walks by doing binary search.
+inline static std::map<TargetDescriptor, TargetData> targets;
+
 Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_suitable_priority_location_for(std::list<HookInfo>& hooks, HookPriority priority) {
   // Install onto the target, respecting priorities.
   // Note that we may need to recompile some callbacks/fixups to change things
@@ -28,7 +32,7 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
   // - First, walk all the hooks for a viable location, if we can find one. If we cannot, then we have to recompile hooks.
   // TODO: Above
   static_cast<void>(priority);
-  return Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities>::Ok(hooks.begin());
+  return Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities>::Ok(hooks.end());
 }
 
 Result<std::monostate, installation::TargetMismatch> validate_install_metadata(TargetMetadata& existing, HookMetadata const& incoming) {
@@ -41,6 +45,9 @@ Result<std::monostate, installation::TargetMismatch> validate_install_metadata(T
   return Result<std::monostate, installation::TargetMismatch>::Ok();
 }
 
+}  // namespace
+
+namespace flamingo {
 installation::Result Install(HookInfo&& hook) {
   // Null targets to install to are prohibited, but null hook functions are allowed (and will most likely cause
   // horrible crashes when called)
@@ -53,14 +60,20 @@ installation::Result Install(HookInfo&& hook) {
     // To make the first hook, we need to create the TargetData
     // For leapfrog hooks, we need to do something special anyways.
     // TODO: Support leapfrog hooks (where the installation space is fewer than 4U)
-    constexpr static auto kInstallSize = Fixups::kNormalFixupInstCount;
-    if (hook.metadata.method_num_insts >= Fixups::kNormalFixupInstCount) {
-      return installation::Result::ErrAt<installation::TargetTooSmall>(hook.metadata, Fixups::kNormalFixupInstCount);
+    // If we have an orig, we need to have an instruction to jump back to
+    auto const install_size = Fixups::kNormalFixupInstCount + (hook.orig_ptr != nullptr ? 1 : 0);
+    if (hook.metadata.method_num_insts < install_size) {
+      return installation::Result::ErrAt<installation::TargetTooSmall>(hook.metadata, install_size);
+    }
+    // The initial protection of the page that holds the target
+    auto target_initial_protection = PageProtectionType::kExecute | PageProtectionType::kRead;
+    if (hook.metadata.installation_metadata.write_prot) {
+      target_initial_protection |= PageProtectionType::kWrite;
     }
     auto target_pointer = PointerWrapper<uint32_t>(
         std::span<uint32_t>(reinterpret_cast<uint32_t*>(hook.target),
                             reinterpret_cast<uint32_t*>(hook.target) + hook.metadata.method_num_insts),
-        PageProtectionType::kExecute | PageProtectionType::kRead);
+        target_initial_protection);
     auto result = targets.emplace(
         target_info, TargetData{ .metadata =
                                      TargetMetadata{
@@ -75,7 +88,7 @@ installation::Result Install(HookInfo&& hook) {
                                      },
                                  .fixups = Fixups{
                                    // Our fixup target is a subspan the same size as our install size
-                                   .target = { target_pointer.Subspan(kInstallSize) },
+                                   .target = { target_pointer.Subspan(install_size) },
                                    .fixup_inst_destination =
                                        Allocate(kHookAlignment,
                                                 std::min(Page::PageSize, hook.metadata.method_num_insts *
@@ -84,6 +97,8 @@ installation::Result Install(HookInfo&& hook) {
                                  } });
     auto& target_data = result.first->second;
     hook.assign_orig(reinterpret_cast<void*>(&no_fixups));
+    // Always copy over our original instructions to our .fixups instance
+    target_data.fixups.CopyOriginalInsts();
     // If we want to make an orig, we fill it out now
     if (hook.metadata.installation_metadata.need_orig) {
       target_data.fixups.PerformFixupsAndCallback();
@@ -131,6 +146,7 @@ Result<bool, installation::Error> Reinstall(TargetDescriptor target) {
     return RetType::Ok(false);
   }
   // Reinstall the orig by calling PerformFixupsAndCallback() again (as needed)
+  itr->second.fixups.CopyOriginalInsts();
   if (itr->second.metadata.metadata.need_orig) {
     itr->second.fixups.PerformFixupsAndCallback();
   }
@@ -183,4 +199,29 @@ Result<bool, bool> Uninstall(HookHandle handle) {
   target_entry->second.hooks.erase(handle.hook_location);
   return RetType::Ok(true);
 }
+
+std::span<uint32_t> OriginalInstsFor(TargetDescriptor target) {
+  auto itr = targets.find(target);
+  if (itr != targets.end()) {
+    return itr->second.fixups.original_instructions;
+  }
+  return {};
+}
+
+Result<TargetMetadata, std::monostate> MetadataFor(TargetDescriptor target) {
+  auto itr = targets.find(target);
+  if (itr != targets.end()) {
+    return Result<TargetMetadata, std::monostate>::Ok(itr->second.metadata);
+  }
+  return Result<TargetMetadata, std::monostate>::Err();
+}
+
+Result<std::span<uint32_t const>, std::monostate> FixupPointerFor(TargetDescriptor target) {
+  auto itr = targets.find(target);
+  if (itr != targets.end()) {
+    return Result<std::span<uint32_t const>, std::monostate>::Ok(itr->second.fixups.target.addr);
+  }
+  return Result<std::span<uint32_t const>, std::monostate>::Err();
+}
+
 }  // namespace flamingo

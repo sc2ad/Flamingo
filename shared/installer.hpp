@@ -1,7 +1,10 @@
 
 
 #include <algorithm>
+#include <cstdint>
+#include <span>
 #include <utility>
+#include <variant>
 #include "fixups.hpp"
 #include "hook-data.hpp"
 #include "hook-installation-result.hpp"
@@ -20,14 +23,14 @@ constexpr static auto kNumFixupsPerInst = 4U;
 /// other HookInfo references within the list). We update the shared information within the HookInfo and perform the
 /// install as necessary. Priorities use named IDs for cleaer ordering (before x, after y). This may require a full
 /// reassmebly of the list!
-[[nodiscard]] installation::Result Install(HookInfo&& hook);
+[[nodiscard]] FLAMINGO_EXPORT installation::Result Install(HookInfo&& hook);
 
 /// @brief Called on a target to reinstall all targets present at that location.
 /// A reinstall is done by re-performing orig fixups at the target, and rewriting a jump to the first hook.
 /// All other hooks remain unchanged.
 /// This function returns Ok(true) if all hooks were reinstalled correctly, Ok(false) if there were no hooks to
 /// reinstall, and Error(...) otherwise.
-[[nodiscard]] Result<bool, installation::Error> Reinstall(TargetDescriptor target);
+[[nodiscard]] FLAMINGO_EXPORT Result<bool, installation::Error> Reinstall(TargetDescriptor target);
 
 /// @brief Called on an installed hook to uninstall it from the set of all hooks.
 /// Note that uninstalling a hook never requires a recompile of the set, as no priorities are altered.
@@ -44,5 +47,18 @@ constexpr static auto kNumFixupsPerInst = 4U;
 /// invalidated.
 /// @returns Ok(true) if the target remains, Ok(false) if the full target was removed from the map, Error(false) if no
 /// target was found from this handle, Error(true) if a remapping failure happened.
-[[nodiscard]] Result<bool, bool> Uninstall(HookHandle handle);
+[[nodiscard]] FLAMINGO_EXPORT Result<bool, bool> Uninstall(HookHandle handle);
+
+/// @brief Returns the original instructions for a specified target, if it is the start of a known hook.
+/// If the target is not hooked, returns an empty span.
+std::span<uint32_t> FLAMINGO_EXPORT OriginalInstsFor(TargetDescriptor target);
+
+/// @brief Returns the TargetMetadata for a provided TargetDescriptor.
+/// If the target is not hooked, returns an error Result.
+[[nodiscard]] FLAMINGO_EXPORT Result<TargetMetadata, std::monostate> MetadataFor(TargetDescriptor target);
+
+/// @brief Returns the Fixups span for a provided TargetDescriptor.
+/// If the target is not hooked, returns an error Result.
+[[nodiscard]] FLAMINGO_EXPORT Result<std::span<uint32_t const>, std::monostate> FixupPointerFor(TargetDescriptor target);
+
 }  // namespace flamingo
