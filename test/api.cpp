@@ -127,4 +127,5 @@ void test_hook_with_orig() {
 
 int main() {
   test_simple_hook();
+  test_hook_with_orig();
 }

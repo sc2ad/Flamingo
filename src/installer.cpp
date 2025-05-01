@@ -61,9 +61,9 @@ installation::Result Install(HookInfo&& hook) {
     // For leapfrog hooks, we need to do something special anyways.
     // TODO: Support leapfrog hooks (where the installation space is fewer than 4U)
     // If we have an orig, we need to have an instruction to jump back to
-    auto const install_size = Fixups::kNormalFixupInstCount + (hook.orig_ptr != nullptr ? 1 : 0);
-    if (hook.metadata.method_num_insts < install_size) {
-      return installation::Result::ErrAt<installation::TargetTooSmall>(hook.metadata, install_size);
+    auto const method_size = Fixups::kNormalFixupInstCount + (hook.orig_ptr != nullptr ? 1 : 0);
+    if (hook.metadata.method_num_insts < method_size) {
+      return installation::Result::ErrAt<installation::TargetTooSmall>(hook.metadata, method_size);
     }
     // The initial protection of the page that holds the target
     auto target_initial_protection = PageProtectionType::kExecute | PageProtectionType::kRead;
@@ -88,7 +88,7 @@ installation::Result Install(HookInfo&& hook) {
                                      },
                                  .fixups = Fixups{
                                    // Our fixup target is a subspan the same size as our install size
-                                   .target = { target_pointer.Subspan(install_size) },
+                                   .target = { target_pointer.Subspan(Fixups::kNormalFixupInstCount) },
                                    .fixup_inst_destination =
                                        Allocate(kHookAlignment,
                                                 std::min(Page::PageSize, hook.metadata.method_num_insts *
@@ -219,7 +219,7 @@ Result<TargetMetadata, std::monostate> MetadataFor(TargetDescriptor target) {
 Result<std::span<uint32_t const>, std::monostate> FixupPointerFor(TargetDescriptor target) {
   auto itr = targets.find(target);
   if (itr != targets.end()) {
-    return Result<std::span<uint32_t const>, std::monostate>::Ok(itr->second.fixups.target.addr);
+    return Result<std::span<uint32_t const>, std::monostate>::Ok(itr->second.fixups.fixup_inst_destination.addr);
   }
   return Result<std::span<uint32_t const>, std::monostate>::Err();
 }
