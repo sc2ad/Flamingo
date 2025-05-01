@@ -149,6 +149,38 @@ void test_multi_hook() {
   if (!result.has_value()) {
     ERROR("Installation result for hook 2 failed, index: {}", result.error().index());
   }
+  // Validate target looks good (should call hook_function_to_call_2)
+  {
+    TestWrapper validator(hook_target_far, "Far hook no fixups");
+    print_decode_loop(hook_target_far);
+    // Callback (ldr x17, DATA[0]; br x17)
+    validator.expect_ops<ARM64_OP_REG, ARM64_OP_IMM>(ARM64_INS_LDR, ARM64_REG_X17,
+          round_up8(&hook_target_far[2]));
+    validator.expect_ops<ARM64_OP_REG>(ARM64_INS_BR, ARM64_REG_X17);
+    // Data validation
+    // Check callback point is valid
+    validator.expect_big_data(hook_function_to_call_2);
+  }
+  // Hook 2's orig pointer should refer to hook 1's target
+  if ((uintptr_t)orig_two != hook_function_to_call) {
+    ERROR("Hook 2 should call hook 1 as part of hook 2's orig call! Instead, hook 2's orig is: 0x{:x}", (uintptr_t)orig_two);
+  }
+  // Now, uninstall hook 1. Hook 2's orig pointer should then refer to the fixup pointer
+  auto uninstall_result = flamingo::Uninstall(result.value().returned_handle);
+  if (!uninstall_result.has_value()) {
+    ERROR("Failed to uninstall: failure mode: {}", uninstall_result.error());
+  }
+  if (uninstall_result.value() == false) {
+    ERROR("Uninstall should NOT have wiped this target clean, since there is still one hook left. Target: {}", fmt::ptr(hook_target_far.data()));
+  }
+  // Get orig pointer for the hook and compare it to orig_two's held pointer now
+  auto fixup_result = flamingo::FixupPointerFor(flamingo::TargetDescriptor(hook_target_far.data()));
+  if (!fixup_result.has_value()) {
+    ERROR("Failed to get fixup pointer for target: {}", fmt::ptr(hook_target_far.data()));
+  }
+  if ((uintptr_t)orig_two != (uintptr_t)fixup_result.value().data()) {
+    ERROR("Hook 2 should fixups for the target as part of hook 2's orig call! Instead, hook 2's orig is: 0x{:x} and the fixups are: {}", (uintptr_t)orig_two, fmt::ptr(fixup_result.value().data()));
+  }
 }
 }  // namespace
 

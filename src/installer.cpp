@@ -32,7 +32,7 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
   // - First, walk all the hooks for a viable location, if we can find one. If we cannot, then we have to recompile hooks.
   // TODO: Above
   static_cast<void>(priority);
-  return Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities>::Ok(hooks.end());
+  return Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities>::Ok(hooks.begin());
 }
 
 Result<std::monostate, installation::TargetMismatch> validate_install_metadata(TargetMetadata& existing, HookMetadata const& incoming) {
