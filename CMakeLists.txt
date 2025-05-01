@@ -52,6 +52,10 @@ if (TEST_BUILD)
 
     add_executable(api-test ${CMAKE_CURRENT_SOURCE_DIR}/test/api.cpp)
     target_link_libraries(api-test PRIVATE flamingo-static)
+    include(CTest)
+
+    add_test(fixups fixup-test)
+    add_test(apis api-test)
 else()
     MESSAGE(ERROR "No NDK support yet! Try using -DTEST_BUILD=ON")
 endif()
