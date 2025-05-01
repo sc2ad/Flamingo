@@ -54,29 +54,8 @@ jobs:
           ninja -C build
  
       # Run the test to ensure validity
-      - name: Run simple test
-        run: ./build/fixup-test 2>&1 | tee ./build/test-output.txt
-
-      # Upload test artifact
-      - name: Upload test artifact
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-output.txt
-          path: ./build/test-output.txt
-          if-no-files-found: error
-
-      - name: Run API test
-        run: ./build/api-test 2>&1 | tee ./build/api-test-output.txt
-
-      # Upload test artifact
-      - name: Upload test artifact
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: api-test-output.txt
-          path: ./build/api-test-output.txt
-          if-no-files-found: error
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
   build:
     runs-on: ubuntu-latest
 

@@ -84,7 +84,7 @@ void test_hook_with_orig() {
   static uint8_t to_hook[]{ 0xf7, 0x0f, 0x1c, 0xf8, 0xf6, 0x57, 0x01, 0xa9, 0xf4, 0x4f, 0x02, 0xa9, 0xfd, 0x7b, 0x03,
                             0xa9, 0xfd, 0xc3, 0x00, 0x91, 0x48, 0x18, 0x40, 0xf9, 0x16, 0xd4, 0x42, 0xa9, 0xf3, 0x03,
                             0x02, 0xaa, 0xf4, 0x03, 0x01, 0xaa, 0x17, 0x01, 0x40, 0xf9, 0xe8, 0xba, 0x44, 0x39 };
-  // Simplest hook (no orig, num instructions is default, Cdecl calling convention, "" name, no priorities,
+  // Simplest hook but with an orig (num instructions is default, Cdecl calling convention, "" name, no priorities,
   // non-midpoint)
   // Validate initial function looks good
   {
@@ -123,9 +123,37 @@ void test_hook_with_orig() {
   }
 }
 
+
+void test_multi_hook() {
+  // Boilerplate for the test wrapper
+  // Keep these values close together so that the far hook destination is far for both of them.
+  uintptr_t hook_function_to_call = 0x12345678;
+  uintptr_t hook_function_to_call_2 = 0x12345679;
+  void* fixup_result_ptr;
+  void* orig_two;
+  static uint8_t to_hook[]{ 0xf7, 0x0f, 0x1c, 0xf8, 0xf6, 0x57, 0x01, 0xa9, 0xf4, 0x4f, 0x02, 0xa9, 0xfd, 0x7b, 0x03,
+                            0xa9, 0xfd, 0xc3, 0x00, 0x91, 0x48, 0x18, 0x40, 0xf9, 0x16, 0xd4, 0x42, 0xa9, 0xf3, 0x03,
+                            0x02, 0xaa, 0xf4, 0x03, 0x01, 0xaa, 0x17, 0x01, 0x40, 0xf9, 0xe8, 0xba, 0x44, 0x39 };
+  // Simplest hook (no orig, num instructions is default, Cdecl calling convention, "" name, no priorities,
+  // non-midpoint)
+  auto hook_target_far = perform_far_hook_test(hook_function_to_call, to_hook);
+  auto result = flamingo::Install(
+    flamingo::HookInfo{ (void (*)())hook_function_to_call, hook_target_far.data(), (void (**)()) &fixup_result_ptr });
+  if (!result.has_value()) {
+    ERROR("Installation result failed, index: {}", result.error().index());
+  }
+  // Second hook
+  auto second_hook = flamingo::Install(
+    flamingo::HookInfo{ (void (*)())hook_function_to_call_2, hook_target_far.data(), (void (**)())&orig_two}
+  );
+  if (!result.has_value()) {
+    ERROR("Installation result for hook 2 failed, index: {}", result.error().index());
+  }
+}
 }  // namespace
 
 int main() {
   test_simple_hook();
   test_hook_with_orig();
+  test_multi_hook();
 }
