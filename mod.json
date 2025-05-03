@@ -1,15 +1,18 @@
 {
+  "$schema": "https://raw.githubusercontent.com/Lauriethefish/QuestPatcher.QMod/refs/heads/main/QuestPatcher.QMod/Resources/qmod.schema.json",
   "_QPVersion": "1.0.0",
   "name": "flamingo",
   "id": "flamingo",
+  "modloader": "Scotland2",
   "author": "Sc2ad",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "General purpose Android hook library",
   "dependencies": [],
-  "modFiles": [
+  "modFiles": [],
+  "lateModFiles": [],
+  "libraryFiles": [
     "libflamingo.so"
   ],
-  "libraryFiles": [],
   "fileCopies": [],
   "copyExtensions": []
 }

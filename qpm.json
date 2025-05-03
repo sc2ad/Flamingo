@@ -36,11 +36,6 @@
       "additionalData": {
         "private": true
       }
-    },
-    {
-      "id": "paper2_scotland2",
-      "versionRange": "^4.6.1",
-      "additionalData": {}
     }
   ]
 }

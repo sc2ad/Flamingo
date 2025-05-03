@@ -7,7 +7,7 @@
     "info": {
       "name": "flamingo",
       "id": "flamingo",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "url": "https://github.com/sc2ad/Flamingo",
       "additionalData": {
         "overrideSoName": "libflamingo.so"
@@ -37,34 +37,10 @@
         "additionalData": {
           "private": true
         }
-      },
-      {
-        "id": "paper2_scotland2",
-        "versionRange": "^4.6.1",
-        "additionalData": {}
       }
     ]
   },
   "restoredDependencies": [
-    {
-      "dependency": {
-        "id": "paper2_scotland2",
-        "versionRange": "=4.6.1",
-        "additionalData": {
-          "soLink": "https://github.com/Fernthedev/paperlog/releases/download/v4.6.1/libpaper2_scotland2.so",
-          "overrideSoName": "libpaper2_scotland2.so",
-          "modLink": "https://github.com/Fernthedev/paperlog/releases/download/v4.6.1/paper2_scotland2.qmod",
-          "branchName": "version/v4_6_1",
-          "compileOptions": {
-            "systemIncludes": [
-              "shared/utfcpp/source"
-            ]
-          },
-          "cmake": false
-        }
-      },
-      "version": "4.6.1"
-    },
     {
       "dependency": {
         "id": "fmt",
