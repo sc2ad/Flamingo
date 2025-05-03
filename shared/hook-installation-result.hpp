@@ -8,8 +8,10 @@
 
 #include "calling-convention.hpp"
 #include "hook-metadata.hpp"
+#include "page-allocator.hpp"
 #include "target-data.hpp"
 #include "type-info.hpp"
+#include "util.hpp"
 
 namespace flamingo {
 
@@ -139,3 +141,28 @@ using Result = flamingo::Result<Ok, Error>;
 }  // namespace installation
 
 }  // namespace flamingo
+
+// Custom formatter for flamingo::Error
+template <> class fmt::formatter<flamingo::installation::Error> {
+public:
+  constexpr auto parse (format_parse_context& ctx) { return ctx.begin(); }
+  template <typename Context>
+  constexpr auto format (flamingo::installation::Error const& error, Context& ctx) const {
+    using namespace flamingo::installation;
+    return std::visit(flamingo::util::overload {
+      [&](TargetIsNull const& null_target) {
+        return format_to(ctx.out(), "Null target, for hook with name: {}", null_target.installing_hook.name);
+      },
+      [&](TargetBadPriorities const& bad_priorities) {
+        return format_to(ctx.out(), "Bad priorities, for hook with name: {}", bad_priorities.installing_hook.name);
+      },
+      [&](TargetMismatch const& mismatch) {
+        // TODO: Actually print this out
+        return format_to(ctx.out(), "Target mismatch type: {}", mismatch.index());
+      },
+      [&](TargetTooSmall const& small_target) {
+        return format_to(ctx.out(), "Target too small, needed: {} instructions, but have: {} instructions for hook with name: {}", small_target.needed_num_insts, small_target.actual_num_insts, small_target.installing_hook.name);
+      }
+    }, error);
+  }
+};
