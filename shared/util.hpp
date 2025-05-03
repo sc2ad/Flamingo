@@ -44,8 +44,7 @@
 #include <cassert>
 
 #ifdef ANDROID
-#include "beatsaber-hook/shared/utils/utils-functions.h"
-#include "paper/shared/logger.hpp"
+#include "paper2_scotland2/shared/logger.hpp"
 
 #ifndef NDEBUG
 #define FLAMINGO_ASSERT(...) assert(__VA_ARGS__)
@@ -60,7 +59,7 @@
   do {                              \
     FLAMINGO_CRITICAL(__VA_ARGS__); \
     Paper::Logger::WaitForFlush();  \
-    SAFE_ABORT();                   \
+    std::abort();                   \
   } while (0)
 
 #else
