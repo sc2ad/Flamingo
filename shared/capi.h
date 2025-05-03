@@ -1,6 +1,8 @@
 #pragma once
 
 #include <stdint.h>
+
+#define FLAMINGO_C_EXPORT __attribute__((visibility("default")))
 // The flamingo C API
 
 #ifdef __cplusplus
@@ -30,7 +32,9 @@ typedef struct {
 /// The returned original_instructions pointer is safe to read in the range [0..hook_size).
 /// This function is commonly used for ensuring correct results when going through an xref trace, or validating real
 /// instructions.
-FlamingoOriginalInstructionsResult flamingo_orig_for(uint32_t const* addr);
+FLAMINGO_C_EXPORT FlamingoOriginalInstructionsResult flamingo_orig_for(uint32_t const* addr);
+
+
 
 #ifdef __cplusplus
 }
