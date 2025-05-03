@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <optional>
 #include <tuple>
 #include <type_traits>
@@ -12,12 +13,12 @@
 
 namespace flamingo {
 
-template<class T>
+template <class T>
 struct is_variant {
   constexpr static bool value = false;
 };
 
-template<class... TArgs>
+template <class... TArgs>
 struct is_variant<std::variant<TArgs...>> {
   constexpr static bool value = true;
 };
@@ -34,10 +35,11 @@ struct Result {
     return Result{ std::variant<E, T>(std::in_place_index_t<0>{}, std::forward<TArgs>(args)...) };
   }
   // Helper function for if E is a variant (we have multiple errors and need to construct one)
-  template<class ET, class... TArgs>
-  requires (is_variant<E>::value)
+  template <class ET, class... TArgs>
+    requires(is_variant<E>::value)
   static Result ErrAt(TArgs&&... args) {
-    return Result{ std::variant<E, T>(std::in_place_index_t<0>{}, E(std::in_place_type_t<ET>{}, std::forward<TArgs>(args)...))};
+    return Result{ std::variant<E, T>(std::in_place_index_t<0>{},
+                                      E(std::in_place_type_t<ET>{}, std::forward<TArgs>(args)...)) };
   }
   T const& value() const {
     return std::get<1>(data);
@@ -74,88 +76,65 @@ struct TargetTooSmall : HookErrorInfo {
   uint_fast16_t actual_num_insts;
   uint_fast16_t needed_num_insts;
 };
-/// @brief An error when the target method is impossible to install given its priorities and other hooks to install it onto.
+/// @brief An error when the target method is impossible to install given its priorities and other hooks to install it
+/// onto.
 struct TargetBadPriorities : HookErrorInfo {
   // TODO: Add a bunch of stuff here
   TargetBadPriorities(HookMetadata const& m) : HookErrorInfo(m.name_info) {}
 };
-/// @brief An error when the target method has some validation failure with respect to the metadata it holds.
-struct TargetMismatch : HookErrorInfo {
-  TargetMismatch(HookMetadata const& m) : HookErrorInfo(m.name_info) {}
-};
-
 // TODO: Should we add the incoming hook IDs?
 
-struct MismatchReturn {
-  TypeInfo existing{};
-  TypeInfo incoming{};
+#ifndef FLAMINGO_NO_REGISTRATION_CHECKS
+struct MismatchReturn : HookErrorInfo {
+  MismatchReturn(HookMetadata const& m, TypeInfo existing)
+      : HookErrorInfo(m.name_info), existing(existing), incoming(m.return_info) {}
+  TypeInfo existing;
+  TypeInfo incoming;
 };
 
-struct MismatchParam {
+struct MismatchParam : HookErrorInfo {
+  MismatchParam(HookMetadata const& m, size_t idx, TypeInfo existing)
+      : HookErrorInfo(m.name_info), idx(idx), existing(existing), incoming(m.parameter_info[idx]) {}
   size_t idx{};
   TypeInfo existing{};
   TypeInfo incoming{};
 };
 
-struct MismatchTargetConv {
+struct MismatchParamCount : HookErrorInfo {
+  MismatchParamCount(HookMetadata const& m, size_t existing)
+      : HookErrorInfo(m.name_info), existing(existing), incoming(m.parameter_info.size()) {}
+  size_t existing;
+  size_t incoming;
+};
+
+#endif
+
+struct MismatchTargetConv : HookErrorInfo {
+  MismatchTargetConv(HookMetadata const& m, CallingConvention existing)
+      : HookErrorInfo(m.name_info), existing(existing), incoming(m.convention) {}
   CallingConvention existing{};
   CallingConvention incoming{};
 };
 
-struct MismatchMidpoint {
+struct MismatchMidpoint : HookErrorInfo {
+  MismatchMidpoint(HookMetadata const& m, bool existing)
+      : HookErrorInfo(m.name_info), existing(existing), incoming(m.installation_metadata.is_midpoint) {}
   bool existing{};
   bool incoming{};
 };
 
-namespace util {
-
-template <typename T, typename... TArgs>
-consteval static bool all_unique() {
-  if constexpr (sizeof...(TArgs) == 0ULL) {
-    return true;
-  } else {
-    return (!std::is_same_v<T, TArgs> && ...) && all_unique<TArgs...>();
-  }
-}
-
-template <class... TArgs>
-  requires(all_unique<TArgs...>())
-using OptionTuple = std::tuple<std::optional<TArgs>...>;
-
-template <class... TArgs>
-  requires(all_unique<TArgs...>())
-struct OptionalErrors {
- private:
-  OptionTuple<TArgs...> maybe_errors;
-
- public:
-  [[nodiscard]] constexpr bool has_error() const {
-    return std::apply([](auto&&... opts) { return (opts || ...); }, maybe_errors);
-  }
-  template <class T>
-  void assign(T&& val) {
-    std::get<std::optional<T>>(maybe_errors) = std::forward<T>(val);
-  }
-};
-
-}  // namespace util
+#ifndef FLAMINGO_NO_REGISTRATION_CHECKS
+/// @brief An error when the target method has some validation failure with respect to the metadata it holds.
+using TargetMismatch = std::variant<MismatchTargetConv, MismatchMidpoint, MismatchReturn, MismatchParam, MismatchParamCount>;
+#else
+/// @brief An error when the target method has some validation failure with respect to the metadata it holds.
+using TargetMismatch = std::variant<MismatchTargetConv, MismatchMidpoint>;
+#endif
 
 // Can be one of many cases.
 using Error = std::variant<TargetIsNull, TargetBadPriorities, TargetMismatch, TargetTooSmall>;
 
 using Result = flamingo::Result<Ok, Error>;
-
-template <class T>
-auto& get(Error const& obj) {
-  return std::get<std::optional<T>>(obj);
-}
-
-template <class T>
-void merge_optional(std::optional<T>& lhs, std::optional<T> const& rhs) {
-  if (rhs) {
-    lhs.emplace(*rhs);
-  }
-}
 
 }  // namespace installation
 

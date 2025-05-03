@@ -1,4 +1,5 @@
 #include "installer.hpp"
+#include <algorithm>
 #include <cstdint>
 #include <iterator>
 #include <list>
@@ -24,25 +25,49 @@ using namespace flamingo;
 /// @brief The set of all targets hooked. An ordered map so we can perform large-scale walks by doing binary search.
 inline static std::map<TargetDescriptor, TargetData> targets;
 
-Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_suitable_priority_location_for(std::list<HookInfo>& hooks, HookPriority priority) {
+Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_suitable_priority_location_for(
+    std::list<HookInfo>& hooks, HookPriority priority) {
   // Install onto the target, respecting priorities.
   // Note that we may need to recompile some callbacks/fixups to change things
   // 1. Topological sort on our hooks that exist here by priority
-  // - Find a suitable location where we can fit (note that we MAY need to recompile and move hooks around in order to do this)
-  // - First, walk all the hooks for a viable location, if we can find one. If we cannot, then we have to recompile hooks.
+  // - Find a suitable location where we can fit (note that we MAY need to recompile and move hooks around in order to
+  // do this)
+  // - First, walk all the hooks for a viable location, if we can find one. If we cannot, then we have to recompile
+  // hooks.
   // TODO: Above
   static_cast<void>(priority);
   return Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities>::Ok(hooks.begin());
 }
 
-Result<std::monostate, installation::TargetMismatch> validate_install_metadata(TargetMetadata& existing, HookMetadata const& incoming) {
+Result<std::monostate, installation::TargetMismatch> validate_install_metadata(TargetMetadata& existing,
+                                                                               HookMetadata const& incoming) {
   // TODO: At this point, we should be double checking metadata.
+  using ResultT = Result<std::monostate, installation::TargetMismatch>;
   // 1. Take the min of num_insts/verify they are equivalent
+  existing.method_num_insts = std::min(existing.method_num_insts, incoming.method_num_insts);
   // 2. Validate calling convention matches
-  // 3. Ensure parameter_info and return_info are matching (ifdef guarded)
-  static_cast<void>(existing);
-  static_cast<void>(incoming);
-  return Result<std::monostate, installation::TargetMismatch>::Ok();
+  if (existing.convention != incoming.convention) {
+    return ResultT::ErrAt<installation::MismatchTargetConv>(incoming, existing.convention);
+  }
+  // 3. Validate midpoint matches
+  if (existing.metadata.is_midpoint != incoming.installation_metadata.is_midpoint) {
+    return ResultT::ErrAt<installation::MismatchMidpoint>(incoming, existing.metadata.is_midpoint);
+  }
+// 3. Ensure parameter_info and return_info are matching (ifdef guarded)
+#ifndef FLAMINGO_NO_REGISTRATION_CHECKS
+  if (existing.return_info != incoming.return_info) {
+    return ResultT::ErrAt<installation::MismatchReturn>(incoming, existing.return_info);
+  }
+  if (existing.parameter_info.size() != incoming.parameter_info.size()) {
+    return ResultT::ErrAt<installation::MismatchParamCount>(incoming, existing.parameter_info.size());
+  }
+  for (size_t i = 0; i < existing.parameter_info.size(); i++) {
+    if (existing.parameter_info[i] != incoming.parameter_info[i]) {
+      return ResultT::ErrAt<installation::MismatchParam>(incoming, i, existing.parameter_info[i]);
+    }
+  }
+#endif
+  return ResultT::Ok();
 }
 
 }  // namespace
@@ -120,7 +145,8 @@ installation::Result Install(HookInfo&& hook) {
     return installation::Result::ErrAt<installation::TargetBadPriorities>(location_or_err.error());
   }
   auto const location = location_or_err.value();
-  // 2. Assuming we found a reasonable location to install, insert our new hook before this location, and then adjust those around us to match.
+  // 2. Assuming we found a reasonable location to install, insert our new hook before this location, and then adjust
+  // those around us to match.
   auto const hook_data_result = hooked_target->second.hooks.emplace(location, std::move(hook));
   // - This is done by looking to the left and right of our target iterator to insert at:
   // -- If left does not exist: Rewrite the jump from the target to us; else rewrite the left's orig final jump to us
@@ -153,7 +179,8 @@ Result<bool, installation::Error> Reinstall(TargetDescriptor target) {
   // Perform the write of the jump to the first hook
   itr->second.fixups.target.WriteJump(itr->second.hooks.begin()->hook_ptr);
   // Note that we do NOT reconstruct all of the inner hook pointers between each hook.
-  // This is done as a partial optimization, but at some point we should revisit this (and adjust the docstring comment to match)
+  // This is done as a partial optimization, but at some point we should revisit this (and adjust the docstring comment
+  // to match)
   // TODO: Above
   return RetType::Ok(true);
 }
