@@ -21,7 +21,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Flamingo static build always exists
 add_library(flamingo-static ${SOURCE_DIR}/fixups.cpp ${SOURCE_DIR}/installer.cpp ${SOURCE_DIR}/page-allocator.cpp)
-target_compile_options(flamingo-static PRIVATE -Wall -Wextra -Werror -Wpedantic -DFMT_HEADER_ONLY)
+target_compile_options(flamingo-static PRIVATE -Wall -Wextra -Werror -Wpedantic -DFMT_HEADER_ONLY -fvisibility=hidden)
 
 option(TEST_BUILD "Enable local executable test builds for sanity checks" ON)
 
