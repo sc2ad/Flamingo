@@ -1,14 +1,8 @@
-
-
-#include <algorithm>
 #include <cstdint>
 #include <span>
-#include <utility>
 #include <variant>
-#include "fixups.hpp"
 #include "hook-data.hpp"
 #include "hook-installation-result.hpp"
-#include "page-allocator.hpp"
 #include "target-data.hpp"
 #include "util.hpp"
 
@@ -59,6 +53,7 @@ std::span<uint32_t> FLAMINGO_EXPORT OriginalInstsFor(TargetDescriptor target);
 
 /// @brief Returns the Fixups span for a provided TargetDescriptor.
 /// If the target is not hooked, returns an error Result.
-[[nodiscard]] FLAMINGO_EXPORT Result<std::span<uint32_t const>, std::monostate> FixupPointerFor(TargetDescriptor target);
+[[nodiscard]] FLAMINGO_EXPORT Result<std::span<uint32_t const>, std::monostate> FixupPointerFor(
+    TargetDescriptor target);
 
 }  // namespace flamingo

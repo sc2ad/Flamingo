@@ -28,4 +28,8 @@ struct TypeInfo {
     }
   }
 };
+
+inline bool operator==(TypeInfo const& lhs, TypeInfo const& rhs) {
+  return lhs.size == rhs.size;
+}
 }  // namespace flamingo
