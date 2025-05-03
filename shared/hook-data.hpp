@@ -27,7 +27,7 @@ struct HookInfo {
   HookInfo(HookFuncType<R, TArgs...> hook_func, void* target, HookFuncType<R, TArgs...>* orig_ptr)
       : HookInfo(hook_func, target, orig_ptr, kDefaultNumInsts, CallingConvention::Cdecl,
                  HookNameMetadata{ .name = "" }, HookPriority{},
-                 InstallationMetadata{ .need_orig = orig_ptr != nullptr }) {}
+                 InstallationMetadata{ .need_orig = orig_ptr != nullptr, .is_midpoint = false, .write_prot = false }) {}
 
   // Helper function to make it really easy to set installation metadata
   template <class R, class... TArgs>

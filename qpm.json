@@ -1,14 +1,26 @@
 {
+  "$schema": "https://raw.githubusercontent.com/QuestPackageManager/QPM.Package/refs/heads/main/qpm.schema.json",
+  "version": "0.4.0",
   "sharedDir": "shared",
   "dependenciesDir": "extern",
   "info": {
     "name": "flamingo",
     "id": "flamingo",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "url": "https://github.com/sc2ad/Flamingo",
     "additionalData": {
       "overrideSoName": "libflamingo.so"
     }
+  },
+  "workspace": {
+    "scripts": {
+      "build": [
+        "pwsh ./build.ps1"
+      ]
+    },
+    "qmodIncludeDirs": [],
+    "qmodIncludeFiles": [],
+    "qmodOutput": null
   },
   "dependencies": [
     {
@@ -20,17 +32,15 @@
     },
     {
       "id": "fmt",
-      "versionRange": "^10.0.0",
+      "versionRange": "^11.0.0",
       "additionalData": {
         "private": true
       }
+    },
+    {
+      "id": "paper2_scotland2",
+      "versionRange": "^4.6.1",
+      "additionalData": {}
     }
-  ],
-  "workspace": {
-    "scripts": {
-      "build": [
-        "pwsh ./build.ps1"
-      ]
-    }
-  }
+  ]
 }

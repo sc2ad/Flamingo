@@ -1,5 +1,7 @@
 {
+  "$schema": "https://raw.githubusercontent.com/QuestPackageManager/QPM.Package/refs/heads/main/qpm.shared.schema.json",
   "config": {
+    "version": "0.4.0",
     "sharedDir": "shared",
     "dependenciesDir": "extern",
     "info": {
@@ -11,6 +13,16 @@
         "overrideSoName": "libflamingo.so"
       }
     },
+    "workspace": {
+      "scripts": {
+        "build": [
+          "pwsh ./build.ps1"
+        ]
+      },
+      "qmodIncludeDirs": [],
+      "qmodIncludeFiles": [],
+      "qmodOutput": null
+    },
     "dependencies": [
       {
         "id": "capstone",
@@ -21,28 +33,45 @@
       },
       {
         "id": "fmt",
-        "versionRange": "^10.0.0",
+        "versionRange": "^11.0.0",
         "additionalData": {
           "private": true
         }
+      },
+      {
+        "id": "paper2_scotland2",
+        "versionRange": "^4.6.1",
+        "additionalData": {}
       }
-    ],
-    "workspace": {
-      "scripts": {
-        "build": [
-          "pwsh ./build.ps1"
-        ]
-      }
-    }
+    ]
   },
   "restoredDependencies": [
     {
       "dependency": {
+        "id": "paper2_scotland2",
+        "versionRange": "=4.6.1",
+        "additionalData": {
+          "soLink": "https://github.com/Fernthedev/paperlog/releases/download/v4.6.1/libpaper2_scotland2.so",
+          "overrideSoName": "libpaper2_scotland2.so",
+          "modLink": "https://github.com/Fernthedev/paperlog/releases/download/v4.6.1/paper2_scotland2.qmod",
+          "branchName": "version/v4_6_1",
+          "compileOptions": {
+            "systemIncludes": [
+              "shared/utfcpp/source"
+            ]
+          },
+          "cmake": false
+        }
+      },
+      "version": "4.6.1"
+    },
+    {
+      "dependency": {
         "id": "fmt",
-        "versionRange": "=10.0.0",
+        "versionRange": "=11.0.2",
         "additionalData": {
           "headersOnly": true,
-          "branchName": "version/v10_0_0",
+          "branchName": "version/v11_0_2",
           "compileOptions": {
             "systemIncludes": [
               "fmt/include/"
@@ -53,7 +82,7 @@
           }
         }
       },
-      "version": "10.0.0"
+      "version": "11.0.2"
     },
     {
       "dependency": {
