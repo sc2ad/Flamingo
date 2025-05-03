@@ -5,9 +5,6 @@ on:
   push:
     branches-ignore:
       - "version-*"
-  pull_request:
-    branches-ignore:
-      - "version-*"
 
 env:
   module_id: flamingo
