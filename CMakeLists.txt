@@ -15,7 +15,7 @@ if (NOT DEFINED CMAKE_BUILD_TYPE)
 endif()
 
 add_compile_options(-fno-rtti -fPIE -fPIC -fno-exceptions -fcolor-diagnostics -DFMT_HEADER_ONLY)
-add_link_options(-lstdc++ -lm)
+add_link_options(-lm)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -80,7 +80,7 @@ if (TEST_BUILD)
     set(CAPSTONE_ARM64_SUPPORT ON)
 
     FetchContent_MakeAvailable(capstone)
-    target_link_libraries(flamingo-static PUBLIC capstone)
+    target_link_libraries(flamingo-static PUBLIC capstone -lstdc++)
     target_include_directories(flamingo-static PUBLIC ${capstone_SOURCE_DIR}/include ${EXTERN_DIR}/includes/fmt/fmt/include)
 
     add_compile_definitions(TEST_BUILD)
@@ -109,7 +109,7 @@ else()
 
     # TODO: Until paper lets us build without exceptions, we don't use paper.
     target_link_options(${COMPILE_ID} PRIVATE -Wl,--exclude-libs,ALL)
-    target_compile_options(${COMPILE_ID} PRIVATE -DFLAMINGO_HEADER_ONLY -fvisibility=hidden)
+    target_compile_options(${COMPILE_ID} PRIVATE -DFLAMINGO_HEADER_ONLY -fvisibility=hidden -Wall -Wextra -Werror -Wpedantic)
 
     target_sources(${COMPILE_ID} PUBLIC ${SOURCE_DIR}/capi.cpp ${SOURCE_DIR}/flamingo-stamp.cpp ${SOURCE_DIR}/fixups.cpp ${SOURCE_DIR}/installer.cpp ${SOURCE_DIR}/page-allocator.cpp)
 

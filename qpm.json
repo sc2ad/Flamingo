@@ -36,6 +36,11 @@
       "additionalData": {
         "private": true
       }
+    },
+    {
+      "id": "scotland2",
+      "versionRange": "^0.1.6",
+      "additionalData": {}
     }
   ]
 }
