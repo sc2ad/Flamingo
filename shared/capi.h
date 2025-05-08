@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 // Most flamingo API calls also require the result to be used in some way.
 #define FLAMINGO_C_EXPORT __attribute__((visibility("default"))) __attribute__((warn_unused_result))
