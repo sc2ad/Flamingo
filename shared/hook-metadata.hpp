@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <fmt/format.h>
+#include <fmt/compile.h>
 
 #include "calling-convention.hpp"
 #include "type-info.hpp"
@@ -46,3 +48,16 @@ struct HookMetadata {
 };
 
 }  // namespace flamingo
+
+// Custom formatter for flamingo::CallingConvention
+template <>
+class fmt::formatter<flamingo::HookNameMetadata> {
+ public:
+  constexpr auto parse(format_parse_context& ctx) {
+    return ctx.begin();
+  }
+  template <typename Context>
+  constexpr auto format(flamingo::HookNameMetadata const& metadata, Context& ctx) const {
+    return format_to(ctx.out(), FMT_COMPILE("name: {}"), metadata.name);
+  }
+};
