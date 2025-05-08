@@ -1,7 +1,7 @@
 #pragma once
 
 #define FLAMINGO_ID "flamingo"
-#define FLAMINGO_VERSION "0.1.0"
+#define FLAMINGO_VERSION "0.2.0"
 
 #define FLAMINGO_EXPORT __attribute__((visibility("default")))
 

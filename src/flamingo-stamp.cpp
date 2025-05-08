@@ -32,7 +32,7 @@ static void print_decode_loop(void* ptr, size_t size) {
   }
 }
 
-extern "C" void late_load() {
+FLAMINGO_EXPORT extern "C" void late_load() {
   FLAMINGO_DEBUG("GIT COMMIT: 0x{:08x}", GIT_COMMIT);
   void* (*runtime_invoke)(void*, void*, void*, void*);
   runtime_invoke = (decltype(runtime_invoke))dlsym(modloader_libil2cpp_handle, "il2cpp_runtime_invoke");
