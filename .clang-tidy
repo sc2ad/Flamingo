@@ -2,10 +2,8 @@ Checks: "clang-diagnostic-*,
   clang-analyzer-*,
   fuchsia-statically-constructed-objects,
   *,
-  -llvmlibc-callee-namespace,
   -readability-identifier-length,
-  -llvmlibc-implementation-in-namespace,
-  -llvmlibc-restrict-system-libc-headers,
+  -llvmlibc-*,
   -llvm-namespace-comment,
   -llvm-include-order,
   -altera-*,
@@ -22,5 +20,4 @@ Checks: "clang-diagnostic-*,
   -abseil-*"
 WarningsAsErrors: true
 HeaderFilterRegex: ""
-AnalyzeTemporaryDtors: false
 FormatStyle: file
