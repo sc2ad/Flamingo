@@ -1,8 +1,8 @@
 #pragma once
 
 #include <stdbool.h>
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 // Most flamingo API calls also require the result to be used in some way.
 #define FLAMINGO_C_EXPORT __attribute__((visibility("default"))) __attribute__((warn_unused_result))
@@ -48,17 +48,27 @@ typedef struct {
 } FlamingoInstallationResult;
 
 /// @brief Returned from a reinstallation. If success is false, the value of any_hooks_reinstalled is undefined.
-/// If success is true, the value describes if any hooks were present at the specified target for a reinstall.
+/// If success is true, the union describes if any hooks were present at the specified target for a reinstall.
+/// If success is false, the union describes the error that occurred during the reinstall. The lifetime of the error
+/// data is until flamingo_format_error is called.
 typedef struct {
   bool success;
-  bool any_hooks_reinstalled;
+  union {
+    bool any_hooks_reinstalled;
+    FlamingoInstallErrorData* data;
+  } value;
 } FlamingoReinstallResult;
 
 /// @brief Returned from an uninstall. If success is false, the value of any_hooks_remain is undefined.
-/// If success is true, the value describes if any hooks remain after the uninstallation at this target.
+/// If success is true, the union describes if any hooks remain after the uninstallation at this target.
+/// If success is false, the union describes the error that occurred during the uninstall. A false value indicates that
+/// no hook was found with the provided handle. A true value indicates that a remapping failure occurred.
 typedef struct {
   bool success;
-  bool any_hooks_remain;
+  union {
+    bool any_hooks_remain;
+    bool remap_failure;
+  } value;
 } FlamingoUninstallResult;
 
 /// @brief The calling conventions of the target used for hook validation.
@@ -86,7 +96,7 @@ typedef struct FlamingoTypeInfo FlamingoTypeInfo;
 /// this location.
 typedef struct {
   /// @brief The size of the hook present at this address, in number of instructions.
-  uint32_t hook_size;
+  size_t hook_size;
   /// @brief A non-owning pointer to the hook's original instructions.
   /// Safe to dereference up to 'hook_size' for as long as there is at least one hook at this location that is not
   /// uninstalled, and no reinstall takes place. If no hook is present at this target, this pointer will exactly equal
@@ -116,7 +126,8 @@ FLAMINGO_C_EXPORT FlamingoHookPriority* flamingo_make_priority(FlamingoNameInfo*
 /// will usually mean a different scratch register should be used, and that the branching logic may be incorrect.
 /// @param write_prot Whether to also mark the page where the target is as writable.
 /// The lifetime of the result is until it is consumed by a call to flamingo_install_hook*.
-FLAMINGO_C_EXPORT FlamingoInstallationMetadata* flamingo_make_install_metadata(bool is_midpoint, bool write_prot);
+FLAMINGO_C_EXPORT FlamingoInstallationMetadata* flamingo_make_install_metadata(bool make_fixups, bool is_midpoint,
+                                                                               bool write_prot);
 
 /// @brief Creates a flamingo::TypeInfo from the provided parameters.
 /// This is used for type checking hook installs to ensure multiple installs over the same target agree upon the
@@ -145,7 +156,7 @@ FLAMINGO_C_EXPORT FlamingoOriginalInstructionsResult flamingo_orig_for(uint32_t 
 /// @param install_metadata Extra installation metadata to specifiy.
 /// The lifetime of the result is until it is consumed by a call to flamingo_uninstall_hook or flamingo_format_error,
 /// depending on the type of the result.
-FLAMINGO_C_EXPORT FlamingoInstallationResult flamingo_install_hook_full(void* hook_function, uint32_t const* target,
+FLAMINGO_C_EXPORT FlamingoInstallationResult flamingo_install_hook_full(void* hook_function, uint32_t* target,
                                                                         void** orig_pointer, uint16_t num_insts,
                                                                         FlamingoCallingConvention convention,
                                                                         FlamingoNameInfo* name_info,
@@ -161,7 +172,7 @@ FLAMINGO_C_EXPORT FlamingoInstallationResult flamingo_install_hook_full(void* ho
 /// @param name_info The name of the hook, made through flamingo_make_name.
 /// The lifetime of the result is until it is consumed by a call to flamingo_uninstall_hook or flamingo_format_error,
 /// depending on the type of the result.
-FLAMINGO_C_EXPORT FlamingoInstallationResult flamingo_install_hook(void* hook_function, uint32_t const* target,
+FLAMINGO_C_EXPORT FlamingoInstallationResult flamingo_install_hook(void* hook_function, uint32_t* target,
                                                                    void** orig_pointer, FlamingoNameInfo* name_info);
 
 /// @brief Exactly the same as flamingo_install_hook_full, except: The number of instructions is 10, calling convention
@@ -173,7 +184,7 @@ FLAMINGO_C_EXPORT FlamingoInstallationResult flamingo_install_hook(void* hook_fu
 /// null, no fixups will be generated.
 /// The lifetime of the result is until it is consumed by a call to flamingo_uninstall_hook or flamingo_format_error,
 /// depending on the type of the result.
-FLAMINGO_C_EXPORT FlamingoInstallationResult flamingo_install_hook_no_name(void* hook_function, uint32_t const* target,
+FLAMINGO_C_EXPORT FlamingoInstallationResult flamingo_install_hook_no_name(void* hook_function, uint32_t* target,
                                                                            void** orig_pointer);
 
 #ifndef FLAMINGO_NO_REGISTRATION_CHECKS
@@ -196,7 +207,7 @@ FLAMINGO_C_EXPORT FlamingoInstallationResult flamingo_install_hook_no_name(void*
 /// The lifetime of the result is until it is consumed by a call to flamingo_uninstall_hook or flamingo_format_error,
 /// depending on the type of the result.
 FLAMINGO_C_EXPORT FlamingoInstallationResult
-flamingo_install_hook_full_checked(void* hook_function, uint32_t const* target, void** orig_pointer, uint16_t num_insts,
+flamingo_install_hook_full_checked(void* hook_function, uint32_t* target, void** orig_pointer, uint16_t num_insts,
                                    FlamingoCallingConvention convention, FlamingoNameInfo* name_info,
                                    FlamingoHookPriority* priority, FlamingoInstallationMetadata* install_metadata,
                                    FlamingoTypeInfo* return_info, FlamingoTypeInfo** parameter_info, size_t num_params);
@@ -214,14 +225,14 @@ flamingo_install_hook_full_checked(void* hook_function, uint32_t const* target, 
 /// @param num_params The length of the parameter_info array.
 /// The lifetime of the result is until it is consumed by a call to flamingo_uninstall_hook or flamingo_format_error,
 /// depending on the type of the result.
-FLAMINGO_C_EXPORT FlamingoInstallationResult flamingo_install_hook_checked(
-    void* hook_function, uint32_t const* target, void** orig_pointer, FlamingoNameInfo* name_info,
-    FlamingoTypeInfo* return_info, FlamingoTypeInfo** parameter_info, size_t num_params);
+FLAMINGO_C_EXPORT FlamingoInstallationResult
+flamingo_install_hook_checked(void* hook_function, uint32_t* target, void** orig_pointer, FlamingoNameInfo* name_info,
+                              FlamingoTypeInfo* return_info, FlamingoTypeInfo** parameter_info, size_t num_params);
 #endif
 
 /// @brief Reinstall the top hook onto the target again. Used if the original function changed for any reason (ex, it
 /// was re-JIT'd). If no hooks are present on the target, returns success: true, any_hooks_reinstalled: false.
-FLAMINGO_C_EXPORT FlamingoReinstallResult flamingo_reinstall_hook(uint32_t const* target);
+FLAMINGO_C_EXPORT FlamingoReinstallResult flamingo_reinstall_hook(uint32_t* target);
 
 /// @brief Given a handle to a successfully installed hook, uninstalls this hook at that location, returning if it
 /// succeeded and if there are other hooks left at that target. After this call, the provided FlamingoHookHandle is
@@ -230,8 +241,7 @@ FLAMINGO_C_EXPORT FlamingoUninstallResult flamingo_uninstall_hook(FlamingoHookHa
 
 /// @brief Given an installation error, formats a human-readable error message and writes it to the provided string, not
 /// exceeding the size provided.
-FLAMINGO_C_EXPORT_VOID void flamingo_format_error(FlamingoInstallErrorData* error, char* buffer,
-                                                         size_t buffer_size);
+FLAMINGO_C_EXPORT_VOID void flamingo_format_error(FlamingoInstallErrorData* error, char* buffer, size_t buffer_size);
 
 #ifdef __cplusplus
 }

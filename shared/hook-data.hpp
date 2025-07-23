@@ -1,10 +1,13 @@
 #pragma once
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <utility>
+#include <vector>
 
 #include "calling-convention.hpp"
 #include "hook-metadata.hpp"
+#include "type-info.hpp"
 
 namespace flamingo {
 
@@ -40,7 +43,7 @@ struct HookInfo {
   template <class R, class... TArgs>
   HookInfo(HookFuncType<R, TArgs...> hook_func, void* target, HookFuncType<R, TArgs...>* orig_ptr, uint16_t num_insts,
            CallingConvention conv, HookNameMetadata&& name_info, HookPriority&& priority,
-           InstallationMetadata&& install_metadata)
+           InstallationMetadata const& install_metadata)
       : target(target),
         orig_ptr(reinterpret_cast<void**>(orig_ptr)),
         hook_ptr(reinterpret_cast<void*>(hook_func)),
@@ -56,6 +59,58 @@ struct HookInfo {
 #endif
         }) {
   }
+
+  HookInfo(void* hook_func, void* target, void** orig_ptr, uint16_t num_insts, CallingConvention conv,
+           HookNameMetadata&& name_info, HookPriority&& priority, InstallationMetadata const& install_metadata)
+      : target(target),
+        orig_ptr(orig_ptr),
+        hook_ptr(hook_func),
+        metadata(HookMetadata{
+          .convention = conv,
+          .installation_metadata = install_metadata,
+          .method_num_insts = num_insts,
+          .name_info = name_info,
+          .priority = priority,
+#ifndef FLAMINGO_NO_REGISTRATION_CHECKS
+          .parameter_info = {},
+          .return_info = {},
+#endif
+        }) {
+  }
+
+  HookInfo(void* hook_func, void* target, void** orig_ptr, uint16_t num_insts, CallingConvention conv,
+    HookNameMetadata&& name_info, HookPriority&& priority, InstallationMetadata const& install_metadata, std::vector<TypeInfo>&& params, TypeInfo&& return_info)
+: target(target),
+ orig_ptr(orig_ptr),
+ hook_ptr(hook_func),
+ metadata(HookMetadata{
+   .convention = conv,
+   .installation_metadata = install_metadata,
+   .method_num_insts = num_insts,
+   .name_info = name_info,
+   .priority = priority,
+#ifndef FLAMINGO_NO_REGISTRATION_CHECKS
+   .parameter_info = std::move(params),
+   .return_info = return_info,
+#endif
+ }) {
+}
+
+HookInfo(void* hook_func, void* target, void** orig_ptr, HookNameMetadata&& name_info, std::vector<TypeInfo>&& params, TypeInfo&& return_info)
+      : HookInfo(hook_func, target, orig_ptr, kDefaultNumInsts, CallingConvention::Cdecl, std::move(name_info),
+                 HookPriority{},
+                 InstallationMetadata{ .need_orig = orig_ptr != nullptr, .is_midpoint = false, .write_prot = false }, std::move(params), std::move(return_info)) {}
+
+
+  HookInfo(void* hook_func, void* target, void** orig_ptr)
+      : HookInfo(hook_func, target, orig_ptr, kDefaultNumInsts, CallingConvention::Cdecl,
+                 HookNameMetadata{ .name = "" }, HookPriority{},
+                 InstallationMetadata{ .need_orig = orig_ptr != nullptr, .is_midpoint = false, .write_prot = false }) {}
+
+  HookInfo(void* hook_func, void* target, void** orig_ptr, HookNameMetadata&& name_info)
+      : HookInfo(hook_func, target, orig_ptr, kDefaultNumInsts, CallingConvention::Cdecl, std::move(name_info),
+                 HookPriority{},
+                 InstallationMetadata{ .need_orig = orig_ptr != nullptr, .is_midpoint = false, .write_prot = false }) {}
 
   void assign_orig(void* ptr) {
     if (orig_ptr != nullptr) *orig_ptr = ptr;

@@ -157,18 +157,18 @@ class fmt::formatter<flamingo::installation::Error> {
     return std::visit(
         flamingo::util::overload{
           [&](TargetIsNull const& null_target) {
-            return format_to(ctx.out(), FMT_COMPILE("Null target, for hook: {}"), null_target.installing_hook);
+            return format_to(ctx.out(), "Null target, for hook: {}", null_target.installing_hook);
           },
           [&](TargetBadPriorities const& bad_priorities) {
-            return format_to(ctx.out(), FMT_COMPILE("Bad priorities, for hook: {}"), bad_priorities.installing_hook);
+            return format_to(ctx.out(), "Bad priorities, for hook: {}", bad_priorities.installing_hook);
           },
           [&](TargetMismatch const& mismatch) {
-            return format_to(ctx.out(), FMT_COMPILE("Target mismatch: {}"), mismatch);
+            return format_to(ctx.out(), "Target mismatch: {}", mismatch);
           },
           [&](TargetTooSmall const& small_target) {
             return format_to(
                 ctx.out(),
-                FMT_COMPILE("Target too small, needed: {} instructions, but have: {} instructions for hook: {}"),
+                "Target too small, needed: {} instructions, but have: {} instructions for hook: {}",
                 small_target.needed_num_insts, small_target.actual_num_insts, small_target.installing_hook);
           } },
         error);
@@ -188,27 +188,27 @@ class fmt::formatter<flamingo::installation::TargetMismatch> {
     return std::visit(
         flamingo::util::overload{
           [&](MismatchTargetConv const& mismatch_conv) {
-            return format_to(ctx.out(), FMT_COMPILE("Target has calling convention: {} but specified: {} for hook: {}"),
+            return format_to(ctx.out(), "Target has calling convention: {} but specified: {} for hook: {}",
                              mismatch_conv.existing, mismatch_conv.incoming, mismatch_conv.installing_hook);
           },
           [&](MismatchMidpoint const& mismatch_midpoint) {
             return format_to(ctx.out(),
-                             FMT_COMPILE("Target has midpoint specified as: {} but specified: {} for hook: {}"),
+                             "Target has midpoint specified as: {} but specified: {} for hook: {}",
                              mismatch_midpoint.existing, mismatch_midpoint.incoming, mismatch_midpoint.installing_hook);
           },
 #ifndef FLAMINGO_NO_REGISTRATION_CHECKS
           [&](MismatchReturn const& mismatch_return) {
             return format_to(ctx.out(),
-                             FMT_COMPILE("Target has return type specified as: {} but specified: {} for hook: {}"),
+                             "Target has return type specified as: {} but specified: {} for hook: {}",
                              mismatch_return.existing, mismatch_return.incoming, mismatch_return.installing_hook);
           },
           [&](MismatchParam const& mismatch_param) {
             return format_to(
-                ctx.out(), FMT_COMPILE("Target has parameter {} type specified as: {} but specified: {} for hook: {}"),
+                ctx.out(), "Target has parameter {} type specified as: {} but specified: {} for hook: {}",
                 mismatch_param.idx, mismatch_param.existing, mismatch_param.incoming, mismatch_param.installing_hook);
           },
           [&](MismatchParamCount const& mismatch_param_count) {
-            return format_to(ctx.out(), FMT_COMPILE("Target has {} parameters but specified: {} for hook: {}"),
+            return format_to(ctx.out(), "Target has {} parameters but specified: {} for hook: {}",
                              mismatch_param_count.existing, mismatch_param_count.incoming,
                              mismatch_param_count.installing_hook);
           },

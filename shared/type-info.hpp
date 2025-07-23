@@ -45,6 +45,6 @@ class fmt::formatter<flamingo::TypeInfo> {
   }
   template <typename Context>
   constexpr auto format(flamingo::TypeInfo const& info, Context& ctx) const {
-    return format_to(ctx.out(), FMT_COMPILE("(size={})"), info.size);
+    return format_to(ctx.out(), "(size={})", info.size);
   }
 };
