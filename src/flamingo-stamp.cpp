@@ -2,11 +2,12 @@
 #include <dlfcn.h>
 #include <cstddef>
 #include <cstdint>
+#include "fixups.hpp"
 #include "git_info.h"
 #include "hook-data.hpp"
+#include "installer.hpp"
 #include "target-data.hpp"
 #include "util.hpp"
-#include "installer.hpp"
 
 extern void* modloader_libil2cpp_handle;
 
@@ -23,9 +24,10 @@ static void print_decode_loop(void* ptr, size_t size) {
   for (size_t i = 0; i < size; i++) {
     cs_insn* insns = nullptr;
     auto count = cs_disasm(handle, reinterpret_cast<uint8_t const*>(&data[i]), sizeof(uint32_t),
-                            reinterpret_cast<uint64_t>(&data[i]), 1, &insns);
+                           reinterpret_cast<uint64_t>(&data[i]), 1, &insns);
     if (count == 1) {
-      FLAMINGO_DEBUG("Addr: {} Value: 0x{:08x}, {} {}", fmt::ptr(&data[i]), data[i], insns[0].mnemonic, insns[0].op_str);
+      FLAMINGO_DEBUG("Addr: {} Value: 0x{:08x}, {} {}", fmt::ptr(&data[i]), data[i], insns[0].mnemonic,
+                     insns[0].op_str);
     } else {
       FLAMINGO_DEBUG("Addr: {} Value: 0x{:08x}", fmt::ptr(&data[i]), data[i]);
     }
@@ -38,8 +40,21 @@ FLAMINGO_EXPORT extern "C" void late_load() {
   runtime_invoke = (decltype(runtime_invoke))dlsym(modloader_libil2cpp_handle, "il2cpp_runtime_invoke");
   FLAMINGO_DEBUG("Found runtime_invoke: {}", fmt::ptr(runtime_invoke));
   print_decode_loop((void*)runtime_invoke, 10);
+  // Read the b at this location and get it back out
+  {
+    constexpr uint64_t mask = ~(0xFFULL << (64U - 8U));
+    auto pc = static_cast<int64_t>(reinterpret_cast<uint64_t>(runtime_invoke) & mask);
+    cs_insn* insns = nullptr;
+    cs_disasm(flamingo::getHandle(), reinterpret_cast<uint8_t const*>(runtime_invoke), 4, pc, 1, &insns);
+    FLAMINGO_DEBUG("inst ops: {}", (int)insns->detail->arm64.op_count);
+    runtime_invoke = (decltype(runtime_invoke))insns->detail->arm64.operands[0].imm;
+    FLAMINGO_DEBUG("runtime_invoke after b resolved: {}", fmt::ptr(runtime_invoke));
+  }
+
+  print_decode_loop((void*)runtime_invoke, 10);
   // Install the hook to it
-  auto result = flamingo::Install(flamingo::HookInfo(&wrap_runtime_invoke, (void*)runtime_invoke, &orig_runtime_invoke));
+  auto result =
+      flamingo::Install(flamingo::HookInfo(&wrap_runtime_invoke, (void*)runtime_invoke, &orig_runtime_invoke));
   if (!result.has_value()) {
     FLAMINGO_ABORT("Hook installation error! Error is of type: {}", result.error());
   }
@@ -49,7 +64,7 @@ FLAMINGO_EXPORT extern "C" void late_load() {
   FLAMINGO_DEBUG("Orig callback (should match runtime_invoke): {}", fmt::ptr(orig_runtime_invoke));
   print_decode_loop((void*)runtime_invoke, 10);
   // Ask for the fixups location and dump that
-  auto fixups = flamingo::FixupPointerFor(flamingo::TargetDescriptor {.target = (void*)runtime_invoke });
+  auto fixups = flamingo::FixupPointerFor(flamingo::TargetDescriptor{ .target = (void*)runtime_invoke });
   if (!result.has_value()) {
     FLAMINGO_ABORT("Fixup lookup failed for target: {}", (void*)runtime_invoke);
   }
