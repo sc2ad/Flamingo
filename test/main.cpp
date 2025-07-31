@@ -179,6 +179,44 @@ static void test_bls_tbzs_within_hook() {
   }
 }
 
+static void test_stp_mov_bl_tbz_mov() {
+  // 0xfe, 0x4f, 0xbf, 0xa9,
+  // 0xf3, 0x03, 0x00, 0xaa,
+  // 0xed, 0xfd, 0xff, 0x97,
+  // 0xa0, 0x00, 0x00, 0x36,
+  // 0xe0, 0x03, 0x13, 0xaa;
+  puts("Testing stp/mov/bl/tbz/mov");
+  static uint8_t to_hook[] = { 0xfe, 0x4f, 0xbf, 0xa9, 0xf3, 0x03, 0x00, 0xaa, 0xed, 0xfd,
+                               0xff, 0x97, 0xa0, 0x00, 0x00, 0x36, 0xe0, 0x03, 0x13, 0xaa };
+  // Near hook test
+  {
+    auto near_results = perform_near_hook_test(to_hook);
+    TestWrapper near_validator(near_results.fixup_inst_destination.addr, "Near hook stp/mov/bl/tbz/mov");
+    near_validator.expect_opc(ARM64_INS_STP);
+    near_validator.expect_opc(ARM64_INS_MOV);
+    near_validator.expect_opc(ARM64_INS_BL);
+    near_validator.expect_opc(ARM64_INS_TBZ);
+
+    // Trampoline
+    near_validator.expect_b(&near_results.target.addr[4]);
+  }
+
+  // Far hook test
+  {
+    auto far_results = perform_far_hook_test(to_hook);
+    TestWrapper far_validator(far_results.fixup_inst_destination.addr, "Far hook stp/mov/bl/tbz/mov");
+    far_validator.expect_opc(ARM64_INS_STP);
+    far_validator.expect_opc(ARM64_INS_MOV);
+    far_validator.expect_opc(ARM64_INS_LDR);
+    far_validator.expect_opc(ARM64_INS_BLR);
+    far_validator.expect_opc(ARM64_INS_TBZ);
+
+    // Trampoline
+    // TODO: Fix assertion
+    far_validator.expect_b(&far_results.far_results.addr[4]);
+  }
+}
+
 static void test_ldr_ldrb_tbnz_bl() {
   puts("Testing ldr/ldrb/tbnz/bl");
   static uint8_t to_hook[]{ 0x17, 0x01, 0x40, 0xf9, 0xe8, 0xba, 0x44, 0x39, 0x68, 0x00, 0x00, 0x37,
@@ -352,5 +390,6 @@ int main() {
   test_ldr_ldrb_tbnz_bl();
   test_adrp();
   test_neg_adrp();
+  test_stp_mov_bl_tbz_mov();
   puts("ALL GOOD!");
 }
