@@ -8,7 +8,6 @@ on:
 
 env:
   module_id: flamingo
-  cache-name: flamingo_cache
   qmodName: flamingo
 
 jobs:
@@ -30,14 +29,14 @@ jobs:
           platform: x64
 
       # Get QPM so we can bring in dependencies
-      - name: QPM Rust Action
+      - name: Setup qpm
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: Fernthedev/qpm-action@v1
         with:
-          #required
-          workflow_token: ${{secrets.GITHUB_TOKEN}}
-
-          restore: true # will run restore on download
-          cache: true #will cache dependencies
+          workflow_token: ${{ secrets.GITHUB_TOKEN }}
+          restore: true
+          cache: true
+          publish: false
 
       - name: QPM Collapse
         run: qpm-rust collapse
@@ -53,6 +52,7 @@ jobs:
       # Run the test to ensure validity
       - name: Run tests
         run: ctest --test-dir build --output-on-failure
+
   build:
     runs-on: ubuntu-latest
 
@@ -70,17 +70,38 @@ jobs:
           echo "$ANDROID_NDK_LATEST_HOME" > ${GITHUB_WORKSPACE}/ndkpath.txt
           cat ${GITHUB_WORKSPACE}/ndkpath.txt
 
-      - name: QPM Rust Action
-        uses: Fernthedev/qpm-rust-action@main
+      # get version from pushed tag
+      - name: Extract version
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: version
+        run: |
+          echo "TAG=${GITHUB_REF#refs/tags/}" >> ${GITHUB_OUTPUT}
+          echo "VERSION=${GITHUB_REF#refs/tags/v}" >> ${GITHUB_OUTPUT}
+
+      - name: Setup qpm
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: Fernthedev/qpm-action@v1
         with:
-          #required
-          workflow_token: ${{secrets.GITHUB_TOKEN}}
+          workflow_token: ${{ secrets.GITHUB_TOKEN }}
+          restore: true
+          cache: true
+          publish: false
 
-          restore: true # will run restore on download
-          cache: true #will cache dependencies
-
-          # Name of qmod in release asset. Assumes exists, same as prior
-          qpm_qmod: ${{env.qmodName}}.qmod
+      # if we have a tag, we are making a qpm release
+      - name: Setup qpm for release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: Fernthedev/qpm-action@v1
+        with:
+          workflow_token: ${{ secrets.GITHUB_TOKEN }}
+          restore: true
+          cache: true
+          publish: late
+          publish_token: ${{ secrets.QPM_TOKEN }}
+          version: ${{ steps.version.outputs.VERSION }}
+          tag: ${{ steps.version.outputs.TAG }}
+          qpm_release_bin: true
+          qpm_debug_bin: true
+          qpm_qmod: ${{ env.qmodName }}.qmod
 
       - name: QPM Collapse
         run: qpm-rust collapse
@@ -122,3 +143,17 @@ jobs:
           name: ${{env.qmodName}}.qmod
           path: ./${{ env.qmodName }}.qmod
           if-no-files-found: error
+
+      # if we had a tag, we should make a release
+      - name: Upload release artifacts
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: upload_file_release
+        uses: softprops/action-gh-release@v0.1.15
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          files: |
+            ./build/${{ steps.libname.outputs.NAME }}
+            ./build/debug_${{ steps.libname.outputs.NAME }}
+            ./${{ env.qmodName }}.qmod
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

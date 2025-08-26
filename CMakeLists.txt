@@ -67,6 +67,7 @@ if (TEST_BUILD)
     add_library(flamingo-static ${SOURCE_DIR}/fixups.cpp ${SOURCE_DIR}/installer.cpp ${SOURCE_DIR}/page-allocator.cpp ${SOURCE_DIR}/capi.cpp)
     target_compile_options(flamingo-static PRIVATE -Wall -Wextra -Werror -Wpedantic -fvisibility=hidden)
     target_include_directories(flamingo-static PUBLIC ${SHARED_DIR})
+    target_include_directories(flamingo-static PRIVATE ${SOURCE_DIR} ${INCLUDE_DIR})
 
     # Fetch capstone (v5.0.1)
     include(FetchContent)
@@ -111,7 +112,11 @@ else()
     target_link_options(${COMPILE_ID} PRIVATE -Wl,--exclude-libs,ALL)
     target_compile_options(${COMPILE_ID} PRIVATE -DFLAMINGO_HEADER_ONLY -fvisibility=hidden -Wall -Wextra -Werror -Wpedantic)
 
-    target_sources(${COMPILE_ID} PUBLIC ${SOURCE_DIR}/capi.cpp ${SOURCE_DIR}/flamingo-stamp.cpp ${SOURCE_DIR}/fixups.cpp ${SOURCE_DIR}/installer.cpp ${SOURCE_DIR}/page-allocator.cpp)
+    target_sources(${COMPILE_ID} PUBLIC ${SOURCE_DIR}/capi.cpp ${SOURCE_DIR}/fixups.cpp ${SOURCE_DIR}/installer.cpp ${SOURCE_DIR}/page-allocator.cpp)
+
+    if (TEST_ON_ANDROID)
+        target_sources(${COMPILE_ID} PUBLIC ${SOURCE_DIR}/flamingo-stamp.cpp)
+    endif()
 
     include(extern.cmake)
 
