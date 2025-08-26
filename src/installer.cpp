@@ -26,7 +26,8 @@ using namespace flamingo;
 inline static std::map<TargetDescriptor, TargetData> targets;
 
 Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_suitable_priority_location_for(
-    std::list<HookInfo>& hooks, HookPriority priority) {
+    std::list<HookInfo>& hooks, HookMetadata const& hook_to_install) {
+  using ResultT = Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities>;
   // Install onto the target, respecting priorities.
   // Note that we may need to recompile some callbacks/fixups to change things
   // 1. Topological sort on our hooks that exist here by priority
@@ -35,13 +36,23 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
   // - First, walk all the hooks for a viable location, if we can find one. If we cannot, then we have to recompile
   // hooks.
   // TODO: Above
-  static_cast<void>(priority);
-  return Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities>::Ok(hooks.begin());
+  // Also, if we have a final priority, we need to be the final hook, unless that hook is itself already marked as
+  // final.
+  if (hook_to_install.priority.is_final) {
+    if (!hooks.empty() && hooks.back().metadata.priority.is_final) {
+      // We cannot install here, we have a conflict
+      return ResultT::Err(installation::TargetBadPriorities{
+        hook_to_install, fmt::format("Cannot install a 'final' hook after another 'final' hook with name: {}", hooks.back().metadata.name_info) });
+    }
+    // Select the end to install at
+    return ResultT::Ok(hooks.end());
+  }
+  // Otherwise, just install it at the front.
+  return ResultT::Ok(hooks.begin());
 }
 
 Result<std::monostate, installation::TargetMismatch> validate_install_metadata(TargetMetadata& existing,
                                                                                HookMetadata const& incoming) {
-  // TODO: At this point, we should be double checking metadata.
   using ResultT = Result<std::monostate, installation::TargetMismatch>;
   // 1. Take the min of num_insts/verify they are equivalent
   existing.method_num_insts = std::min(existing.method_num_insts, incoming.method_num_insts);
@@ -53,7 +64,7 @@ Result<std::monostate, installation::TargetMismatch> validate_install_metadata(T
   if (existing.metadata.is_midpoint != incoming.installation_metadata.is_midpoint) {
     return ResultT::ErrAt<installation::MismatchMidpoint>(incoming, existing.metadata.is_midpoint);
   }
-// 3. Ensure parameter_info and return_info are matching (ifdef guarded)
+  // 4. Ensure parameter_info and return_info are matching (ifdef guarded)
 #ifndef FLAMINGO_NO_REGISTRATION_CHECKS
   if (existing.return_info != incoming.return_info) {
     return ResultT::ErrAt<installation::MismatchReturn>(incoming, existing.return_info);
@@ -140,7 +151,7 @@ installation::Result Install(HookInfo&& hook) {
     return installation::Result::ErrAt<installation::TargetMismatch>(installation_checks.error());
   }
 
-  auto location_or_err = find_suitable_priority_location_for(hooked_target->second.hooks, hook.metadata.priority);
+  auto location_or_err = find_suitable_priority_location_for(hooked_target->second.hooks, hook.metadata);
   if (!location_or_err.has_value()) {
     return installation::Result::ErrAt<installation::TargetBadPriorities>(location_or_err.error());
   }

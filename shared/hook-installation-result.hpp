@@ -1,15 +1,13 @@
 #pragma once
 #include <fmt/compile.h>
 #include <cstddef>
-#include <optional>
-#include <tuple>
-#include <type_traits>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 
 #include "calling-convention.hpp"
 #include "hook-metadata.hpp"
-#include "page-allocator.hpp"
 #include "target-data.hpp"
 #include "type-info.hpp"
 #include "util.hpp"
@@ -83,7 +81,8 @@ struct TargetTooSmall : HookErrorInfo {
 /// onto.
 struct TargetBadPriorities : HookErrorInfo {
   // TODO: Add a bunch of stuff here
-  TargetBadPriorities(HookMetadata const& m) : HookErrorInfo(m.name_info) {}
+  TargetBadPriorities(HookMetadata const& m, std::string_view message) : HookErrorInfo(m.name_info), message(message) {}
+  std::string message;
 };
 // TODO: Should we add the incoming hook IDs?
 
@@ -160,7 +159,7 @@ class fmt::formatter<flamingo::installation::Error> {
             return format_to(ctx.out(), "Null target, for hook: {}", null_target.installing_hook);
           },
           [&](TargetBadPriorities const& bad_priorities) {
-            return format_to(ctx.out(), "Bad priorities, for hook: {}", bad_priorities.installing_hook);
+            return format_to(ctx.out(), "Bad priorities, for hook: {}, with message: {}", bad_priorities.installing_hook, bad_priorities.message);
           },
           [&](TargetMismatch const& mismatch) {
             return format_to(ctx.out(), "Target mismatch: {}", mismatch);

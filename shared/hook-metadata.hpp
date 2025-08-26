@@ -33,6 +33,8 @@ struct HookPriority {
   std::vector<HookNameMetadata> befores{};
   /// @brief The set of constraints for this hook to be installed after (called later than)
   std::vector<HookNameMetadata> afters{};
+  /// @brief Set to true if this hook should be the final hook (closest to the original function)
+  bool is_final{false};
 };
 
 struct HookMetadata {

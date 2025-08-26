@@ -100,7 +100,7 @@ FLAMINGO_C_EXPORT FlamingoNameInfo* flamingo_make_name(char const* name_str) {
 }
 
 FLAMINGO_C_EXPORT FlamingoHookPriority* flamingo_make_priority(FlamingoNameInfo** before_names, size_t num_befores,
-                                                               FlamingoNameInfo** after_names, size_t num_afters) {
+                                                               FlamingoNameInfo** after_names, size_t num_afters, bool is_final) {
   // Iterate the befores and afters, consume their pointers to make new instances for the before set
   auto result = new flamingo::HookPriority();
   result->befores.resize(num_befores);
@@ -115,6 +115,7 @@ FLAMINGO_C_EXPORT FlamingoHookPriority* flamingo_make_priority(FlamingoNameInfo*
     new (&result->afters[i]) flamingo::HookNameMetadata(*value);
     delete value;
   }
+  result->is_final = is_final;
   return reinterpret_cast<FlamingoHookPriority*>(result);
 }
 
