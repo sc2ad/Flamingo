@@ -9,6 +9,7 @@
 #include <span>
 #include "capstone/capstone.h"
 #include "capstone/platform.h"
+#include "git_info.inc"
 #include "util.hpp"
 
 namespace {
@@ -508,6 +509,7 @@ csh getHandle() {
     if (e1 != CS_ERR_OK || e2 != CS_ERR_OK) {
       FLAMINGO_ABORT("Capstone initialization failed: {}, {}", static_cast<int>(e1), static_cast<int>(e2));
     }
+    FLAMINGO_DEBUG("Hello from flamingo! Commit: {:#08x}", GIT_COMMIT);
     init = true;
   }
   return handle;

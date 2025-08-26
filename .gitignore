@@ -60,3 +60,4 @@ qpm_defines.cmake
 build/
 
 build-linux/
+*.inc

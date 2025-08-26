@@ -36,7 +36,7 @@ message(STATUS "GIT_COMMIT: 0x${GIT_COMMIT}")
 message(STATUS "GIT_MODIFIED: ${GIT_MODIFIED}")
 
 # Check for file presence and read current contents
-set(GIT_INFO_H_PATH "${CMAKE_CURRENT_SOURCE_DIR}/include/git_info.h")
+set(GIT_INFO_H_PATH "${CMAKE_CURRENT_SOURCE_DIR}/include/git_info.inc")
 if(EXISTS "${GIT_INFO_H_PATH}")
     file(READ "${GIT_INFO_H_PATH}" GIT_INFO_H_CURRENT)
 else()

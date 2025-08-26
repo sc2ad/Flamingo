@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include "fixups.hpp"
-#include "git_info.h"
+#include "git_info.inc"
 #include "hook-data.hpp"
 #include "installer.hpp"
 #include "target-data.hpp"
