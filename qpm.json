@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/QuestPackageManager/QPM.Package/refs/heads/main/qpm.schema.json",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "sharedDir": "shared",
   "dependenciesDir": "extern",
   "info": {
@@ -43,7 +43,9 @@
     {
       "id": "scotland2",
       "versionRange": "^0.1.6",
-      "additionalData": {}
+      "additionalData": {
+        "includeQmod": false
+      }
     }
   ]
 }

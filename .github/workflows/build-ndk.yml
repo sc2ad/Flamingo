@@ -111,6 +111,10 @@ jobs:
           cd ${GITHUB_WORKSPACE}
           qpm-rust s build
 
+      - name: Make mod.json
+        run: |
+          qpm-rust qmod manifest
+
       - name: Create Qmod
         run: |
           pwsh -Command ./createqmod.ps1 ${{env.qmodName}}

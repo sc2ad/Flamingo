@@ -7,7 +7,9 @@
   "description": "General purpose Android hook library",
   "dependencies": [],
   "modFiles": [],
-  "libraryFiles": [],
+  "libraryFiles": [
+    "libflamingo.so"
+  ],
   "fileCopies": [],
   "copyExtensions": []
 }
