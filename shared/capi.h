@@ -114,14 +114,18 @@ FLAMINGO_C_EXPORT FlamingoNameInfo* flamingo_make_name(char const* name_str);
 /// The parameters are arrays of FlamingoNameInfo that must be dereferencable up to num_befores and num_afters
 /// respectively. The parameters are CONSUMED, that is, the pointers are no longer valid after this API call. This is
 /// used to give hooks priority information in flamingo_install_hook_full*
+/// @param is_final Whether this hook should be the final hook (closest to the original function). This takes precedence
+/// over all other priorities.
 /// The lifetime of the result is until it is consumed by a call to flamingo_install_hook*.
 FLAMINGO_C_EXPORT FlamingoHookPriority* flamingo_make_priority(FlamingoNameInfo** before_names, size_t num_befores,
-                                                               FlamingoNameInfo** after_names, size_t num_afters);
+                                                               FlamingoNameInfo** after_names, size_t num_afters,
+                                                               bool is_final);
 
 /// @brief Creates a flamingo::InstallationMetadata from the provided parameters.
 /// This is used to describe metadata that should hint to flamingo to install correctly.
 /// Note that these are HINTS and are not strictly required for flamingo to follow, though in practice it will. This
 /// will be changed to strong guarantees in a future version of flamingo.
+/// @param make_fixups Whether fixups should be generated for this hook. If false, orig cannot be called safely.
 /// @param is_midpoint Whether this hook is in the middle of a function call instead of at the beginning. Note that this
 /// will usually mean a different scratch register should be used, and that the branching logic may be incorrect.
 /// @param write_prot Whether to also mark the page where the target is as writable.
@@ -149,6 +153,7 @@ FLAMINGO_C_EXPORT FlamingoOriginalInstructionsResult flamingo_orig_for(uint32_t 
 /// @param target The target to install the hook to.
 /// @param orig_pointer A pointer to a function to populate after the install with fixups to call for a trampoline. If
 /// null, no fixups will be generated.
+/// @param num_insts The number of instructions of the target function that are safe to mutate.
 /// @param convention The calling convention of the target function. The hook_function must match the calling
 /// convention.
 /// @param name_info The name of the hook, made through flamingo_make_name.
@@ -196,6 +201,7 @@ FLAMINGO_C_EXPORT FlamingoInstallationResult flamingo_install_hook_no_name(void*
 /// @param target The target to install the hook to.
 /// @param orig_pointer A pointer to a function to populate after the install with fixups to call for a trampoline. If
 /// null, no fixups will be generated.
+/// @param num_insts The number of instructions of the target function that are safe to mutate.
 /// @param convention The calling convention of the target function. The hook_function must match the calling
 /// convention.
 /// @param name_info The name of the hook, made through flamingo_make_name.
