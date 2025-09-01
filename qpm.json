@@ -21,9 +21,11 @@
         "pwsh ./build-android-test.ps1"
       ]
     },
-    "qmodIncludeDirs": [],
+    "qmodIncludeDirs": [
+      "./build"
+    ],
     "qmodIncludeFiles": [],
-    "qmodOutput": null
+    "qmodOutput": "flamingo.qmod"
   },
   "dependencies": [
     {

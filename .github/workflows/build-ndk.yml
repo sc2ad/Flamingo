@@ -5,6 +5,8 @@ on:
   push:
     branches-ignore:
       - "version-*"
+    tags:
+      - "v*"
 
 env:
   module_id: flamingo
@@ -39,7 +41,7 @@ jobs:
           publish: false
 
       - name: QPM Collapse
-        run: qpm-rust collapse
+        run: qpm collapse
 
       - name: CMake with LOCAL_TEST enabled
         run: |
@@ -104,20 +106,21 @@ jobs:
           qpm_qmod: ${{ env.qmodName }}.qmod
 
       - name: QPM Collapse
-        run: qpm-rust collapse
+        run: qpm collapse
 
       - name: Build
         run: |
           cd ${GITHUB_WORKSPACE}
-          qpm-rust s build
+          qpm s build
 
       - name: Make mod.json
         run: |
-          qpm-rust qmod manifest
+          qpm qmod manifest
 
-      - name: Create Qmod
+      - name: Build & Create Qmod
         run: |
-          pwsh -Command ./createqmod.ps1 ${{env.qmodName}}
+          cd ${GITHUB_WORKSPACE}
+          qpm qmod zip
 
       - name: Get Library Name
         id: libname
@@ -125,7 +128,7 @@ jobs:
           cd ./build/
           pattern="lib${module_id}*.so"
           files=( $pattern )
-          echo ::set-output name=NAME::"${files[0]}"
+          echo "NAME=${files[0]}" >> ${GITHUB_OUTPUT}
 
       - name: Upload non-debug artifact
         uses: actions/upload-artifact@v4
