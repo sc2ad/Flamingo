@@ -32,7 +32,6 @@ jobs:
 
       # Get QPM so we can bring in dependencies
       - name: Setup qpm
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: Fernthedev/qpm-action@v1
         with:
           workflow_token: ${{ secrets.GITHUB_TOKEN }}
@@ -130,6 +129,9 @@ jobs:
           files=( $pattern )
           echo "NAME=${files[0]}" >> ${GITHUB_OUTPUT}
 
+      - name: Rename debug artifact
+        run: mv "./build/debug/${{ steps.libname.outputs.NAME }}" "./build/debug_${{steps.libname.outputs.NAME }}"
+
       - name: Upload non-debug artifact
         uses: actions/upload-artifact@v4
         with:
@@ -141,7 +143,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: debug_${{ steps.libname.outputs.NAME }}
-          path: ./build/debug/${{ steps.libname.outputs.NAME }}
+          path: ./build/debug_${{ steps.libname.outputs.NAME }}
           if-no-files-found: error
 
       - name: Upload qmod artifact
