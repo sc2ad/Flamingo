@@ -2,7 +2,7 @@ BasedOnStyle: Google
 AllowShortBlocksOnASingleLine: false
 AllowShortFunctionsOnASingleLine: Empty
 AllowShortIfStatementsOnASingleLine: true
-ColumnLimit: 140
+ColumnLimit: 120
 CommentPragmas: NOLINT:.*
 DerivePointerAlignment: false
 IncludeBlocks: Preserve
@@ -12,3 +12,4 @@ TabWidth: 2
 UseTab: Never
 Cpp11BracedListStyle: false
 QualifierAlignment: Right
+BracedInitializerIndentWidth: 2

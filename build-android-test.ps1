@@ -12,8 +12,8 @@ function Clean-Build-Folder {
 $NDKPath = Get-Content $PSScriptRoot/ndkpath.txt
 
 # Clean-Build-Folder
-# Build flamingo (not as tests) as tests are built via different cmake line (-DTEST_BUILD=1, or unspecified)
-& cmake -G "Ninja" -DCMAKE_BUILD_TYPE="RelWithDebInfo" -DTEST_BUILD=0 -B build
+# Build flamingo local Android test
+& cmake -G "Ninja" -DCMAKE_BUILD_TYPE="Debug" -DTEST_BUILD=0 -DTEST_ON_ANDROID=1 -B build
 & cmake --build ./build
 
 $ExitCode = $LastExitCode

@@ -1,15 +1,30 @@
 {
+  "$schema": "https://raw.githubusercontent.com/QuestPackageManager/QPM.Package/refs/heads/main/qpm.shared.schema.json",
   "config": {
+    "version": "1.0.0",
     "sharedDir": "shared",
     "dependenciesDir": "extern",
     "info": {
       "name": "flamingo",
       "id": "flamingo",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "url": "https://github.com/sc2ad/Flamingo",
       "additionalData": {
         "overrideSoName": "libflamingo.so"
       }
+    },
+    "workspace": {
+      "scripts": {
+        "build": [
+          "pwsh ./build.ps1"
+        ],
+        "build-android-test": [
+          "pwsh ./build-android-test.ps1"
+        ]
+      },
+      "qmodIncludeDirs": [],
+      "qmodIncludeFiles": [],
+      "qmodOutput": null
     },
     "dependencies": [
       {
@@ -21,28 +36,41 @@
       },
       {
         "id": "fmt",
-        "versionRange": "^10.0.0",
+        "versionRange": "^11.0.0",
         "additionalData": {
           "private": true
         }
+      },
+      {
+        "id": "scotland2",
+        "versionRange": "^0.1.6",
+        "additionalData": {
+          "includeQmod": false
+        }
       }
-    ],
-    "workspace": {
-      "scripts": {
-        "build": [
-          "pwsh ./build.ps1"
-        ]
-      }
-    }
+    ]
   },
   "restoredDependencies": [
     {
       "dependency": {
+        "id": "scotland2",
+        "versionRange": "=0.1.6",
+        "additionalData": {
+          "soLink": "https://github.com/sc2ad/scotland2/releases/download/v0.1.6/libsl2.so",
+          "debugSoLink": "https://github.com/sc2ad/scotland2/releases/download/v0.1.6/debug_libsl2.so",
+          "overrideSoName": "libsl2.so",
+          "branchName": "version/v0_1_6"
+        }
+      },
+      "version": "0.1.6"
+    },
+    {
+      "dependency": {
         "id": "fmt",
-        "versionRange": "=10.0.0",
+        "versionRange": "=11.0.2",
         "additionalData": {
           "headersOnly": true,
-          "branchName": "version/v10_0_0",
+          "branchName": "version/v11_0_2",
           "compileOptions": {
             "systemIncludes": [
               "fmt/include/"
@@ -53,7 +81,7 @@
           }
         }
       },
-      "version": "10.0.0"
+      "version": "11.0.2"
     },
     {
       "dependency": {

@@ -1,14 +1,29 @@
 {
+  "$schema": "https://raw.githubusercontent.com/QuestPackageManager/QPM.Package/refs/heads/main/qpm.schema.json",
+  "version": "1.0.0",
   "sharedDir": "shared",
   "dependenciesDir": "extern",
   "info": {
     "name": "flamingo",
     "id": "flamingo",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "url": "https://github.com/sc2ad/Flamingo",
     "additionalData": {
       "overrideSoName": "libflamingo.so"
     }
+  },
+  "workspace": {
+    "scripts": {
+      "build": [
+        "pwsh ./build.ps1"
+      ],
+      "build-android-test": [
+        "pwsh ./build-android-test.ps1"
+      ]
+    },
+    "qmodIncludeDirs": [],
+    "qmodIncludeFiles": [],
+    "qmodOutput": null
   },
   "dependencies": [
     {
@@ -20,17 +35,17 @@
     },
     {
       "id": "fmt",
-      "versionRange": "^10.0.0",
+      "versionRange": "^11.0.0",
       "additionalData": {
         "private": true
       }
+    },
+    {
+      "id": "scotland2",
+      "versionRange": "^0.1.6",
+      "additionalData": {
+        "includeQmod": false
+      }
     }
-  ],
-  "workspace": {
-    "scripts": {
-      "build": [
-        "pwsh ./build.ps1"
-      ]
-    }
-  }
+  ]
 }
