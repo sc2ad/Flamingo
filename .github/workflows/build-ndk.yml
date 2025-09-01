@@ -5,6 +5,8 @@ on:
   push:
     branches-ignore:
       - "version-*"
+    tags:
+      - "v*"
 
 env:
   module_id: flamingo
@@ -113,7 +115,7 @@ jobs:
 
       - name: Make mod.json
         run: |
-          qpm-rust qmod manifest
+          qpm qmod manifest
 
       - name: Build & Create Qmod
         run: |
