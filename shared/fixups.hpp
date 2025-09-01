@@ -1,11 +1,14 @@
 #pragma once
 
-#include <capstone/capstone.h>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
 #include "page-allocator.hpp"
 #include "util.hpp"
+
+#if __has_include(<capstone/capstone.h>)
+#include <capstone/capstone.h>
+#endif
 
 namespace flamingo {
 
@@ -82,7 +85,9 @@ struct Fixups {
   void Uninstall();
 };
 
+#if __has_include(<capstone/capstone.h>)
 // TODO: DO NOT EXPOSE THIS SYMBOL (USE IT FOR TESTING ONLY)
 csh getHandle();
+#endif
 
 }  // namespace flamingo
