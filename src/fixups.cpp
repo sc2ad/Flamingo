@@ -9,7 +9,9 @@
 #include <span>
 #include "capstone/capstone.h"
 #include "capstone/platform.h"
+#if !defined(GIT_COMMIT) && __has_include("git_info.inc")
 #include "git_info.inc"
+#endif
 #include "util.hpp"
 
 namespace {
@@ -509,7 +511,11 @@ csh getHandle() {
     if (e1 != CS_ERR_OK || e2 != CS_ERR_OK) {
       FLAMINGO_ABORT("Capstone initialization failed: {}, {}", static_cast<int>(e1), static_cast<int>(e2));
     }
+    #ifdef GIT_COMMIT
     FLAMINGO_DEBUG("Hello from flamingo! Commit: {:#08x}", GIT_COMMIT);
+    #else
+    FLAMINGO_DEBUG("Hello from flamingo! Unknown build commit hash");
+    #endif
     init = true;
   }
   return handle;
