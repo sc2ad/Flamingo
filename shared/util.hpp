@@ -1,11 +1,11 @@
 #pragma once
 
 #define FLAMINGO_ID "flamingo"
-#define FLAMINGO_VERSION "1.0.0"
-
-#define FLAMINGO_EXPORT __attribute__((visibility("default")))
+#define FLAMINGO_VERSION "1.1.1"
 
 #ifdef FLAMINGO_HEADER_ONLY
+
+#define FLAMINGO_EXPORT __attribute__((visibility("hidden")))
 
 #ifdef ANDROID
 #include <android/log.h>
@@ -41,6 +41,8 @@
 #endif
 
 #else  // FLAMINGO_HEADER_ONLY
+#define FLAMINGO_EXPORT __attribute__((visibility("default")))
+
 #include <cassert>
 
 #ifdef ANDROID
