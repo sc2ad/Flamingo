@@ -21,11 +21,11 @@ class fmt::formatter<flamingo::CallingConvention> {
   constexpr auto format(flamingo::CallingConvention const& conv, Context& ctx) const {
     switch (conv) {
       case flamingo::CallingConvention::Cdecl:
-        return format_to(ctx.out(), "Cdecl");
+        return fmt::format_to(ctx.out(), "Cdecl");
       case flamingo::CallingConvention::Fastcall:
-        return format_to(ctx.out(), "Fastcall");
+        return fmt::format_to(ctx.out(), "Fastcall");
       case flamingo::CallingConvention::Thiscall:
-        return format_to(ctx.out(), "Thiscall");
+        return fmt::format_to(ctx.out(), "Thiscall");
     }
   }
 };

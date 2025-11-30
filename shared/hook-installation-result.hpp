@@ -147,27 +147,25 @@ using Result = flamingo::Result<Ok, Error>;
 template <>
 class fmt::formatter<flamingo::installation::Error> {
  public:
-  constexpr auto parse(format_parse_context& ctx) {
+  constexpr static auto parse(format_parse_context& ctx) {
     return ctx.begin();
   }
   template <typename Context>
-  constexpr auto format(flamingo::installation::Error const& error, Context& ctx) const {
+  constexpr static auto format(flamingo::installation::Error const& error, Context& ctx) {
     using namespace flamingo::installation;
     return std::visit(
         flamingo::util::overload{
-          [&](TargetIsNull const& null_target) {
-            return format_to(ctx.out(), "Null target, for hook: {}", null_target.installing_hook);
+          [&ctx](TargetIsNull const& null_target) {
+            return fmt::format_to(ctx.out(), "Null target, for hook: {}", null_target.installing_hook);
           },
-          [&](TargetBadPriorities const& bad_priorities) {
-            return format_to(ctx.out(), "Bad priorities, for hook: {}, with message: {}", bad_priorities.installing_hook, bad_priorities.message);
+          [&ctx](TargetBadPriorities const& bad_priorities) {
+            return fmt::format_to(ctx.out(), "Bad priorities, for hook: {}, with message: {}",
+                             bad_priorities.installing_hook, bad_priorities.message);
           },
-          [&](TargetMismatch const& mismatch) {
-            return format_to(ctx.out(), "Target mismatch: {}", mismatch);
-          },
-          [&](TargetTooSmall const& small_target) {
-            return format_to(
-                ctx.out(),
-                "Target too small, needed: {} instructions, but have: {} instructions for hook: {}",
+          [&ctx](TargetMismatch const& mismatch) { return fmt::format_to(ctx.out(), "Target mismatch: {}", mismatch); },
+          [&ctx](TargetTooSmall const& small_target) {
+            return fmt::format_to(
+                ctx.out(), "Target too small, needed: {} instructions, but have: {} instructions for hook: {}",
                 small_target.needed_num_insts, small_target.actual_num_insts, small_target.installing_hook);
           } },
         error);
@@ -187,27 +185,25 @@ class fmt::formatter<flamingo::installation::TargetMismatch> {
     return std::visit(
         flamingo::util::overload{
           [&](MismatchTargetConv const& mismatch_conv) {
-            return format_to(ctx.out(), "Target has calling convention: {} but specified: {} for hook: {}",
+            return fmt::format_to(ctx.out(), "Target has calling convention: {} but specified: {} for hook: {}",
                              mismatch_conv.existing, mismatch_conv.incoming, mismatch_conv.installing_hook);
           },
           [&](MismatchMidpoint const& mismatch_midpoint) {
-            return format_to(ctx.out(),
-                             "Target has midpoint specified as: {} but specified: {} for hook: {}",
+            return fmt::format_to(ctx.out(), "Target has midpoint specified as: {} but specified: {} for hook: {}",
                              mismatch_midpoint.existing, mismatch_midpoint.incoming, mismatch_midpoint.installing_hook);
           },
 #ifndef FLAMINGO_NO_REGISTRATION_CHECKS
           [&](MismatchReturn const& mismatch_return) {
-            return format_to(ctx.out(),
-                             "Target has return type specified as: {} but specified: {} for hook: {}",
+            return fmt::format_to(ctx.out(), "Target has return type specified as: {} but specified: {} for hook: {}",
                              mismatch_return.existing, mismatch_return.incoming, mismatch_return.installing_hook);
           },
           [&](MismatchParam const& mismatch_param) {
-            return format_to(
-                ctx.out(), "Target has parameter {} type specified as: {} but specified: {} for hook: {}",
-                mismatch_param.idx, mismatch_param.existing, mismatch_param.incoming, mismatch_param.installing_hook);
+            return fmt::format_to(ctx.out(), "Target has parameter {} type specified as: {} but specified: {} for hook: {}",
+                             mismatch_param.idx, mismatch_param.existing, mismatch_param.incoming,
+                             mismatch_param.installing_hook);
           },
           [&](MismatchParamCount const& mismatch_param_count) {
-            return format_to(ctx.out(), "Target has {} parameters but specified: {} for hook: {}",
+            return fmt::format_to(ctx.out(), "Target has {} parameters but specified: {} for hook: {}",
                              mismatch_param_count.existing, mismatch_param_count.incoming,
                              mismatch_param_count.installing_hook);
           },
