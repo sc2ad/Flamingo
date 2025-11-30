@@ -241,7 +241,7 @@ FLAMINGO_C_EXPORT FlamingoUninstallResult flamingo_uninstall_hook(FlamingoHookHa
 
 FLAMINGO_C_EXPORT_VOID void flamingo_format_error(FlamingoInstallErrorData* error, char* buffer, size_t buffer_size) {
   auto install_error = reinterpret_cast<flamingo::installation::Error*>(error);
-  auto [out, _] = fmt::format_to_n(buffer, buffer_size - 1, FMT_COMPILE("{}"), *install_error);
+  auto [out, _] = fmt::format_to_n(buffer, buffer_size - 1, "{}", *install_error);
   *out = '\0';  // Suffix with a null
   delete install_error;
 }

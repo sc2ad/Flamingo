@@ -44,7 +44,7 @@ void test_simple_hook() {
   auto result = flamingo::Install(
       flamingo::HookInfo{ (void (*)())hook_function_to_call, hook_target_far.data(), (void (**)()) nullptr });
   if (!result.has_value()) {
-    ERROR("Installation result failed, index: {}", result.error().index());
+    ERROR("Installation result failed, index: {}", result.error());
   }
   // Validate target looks good (should call hook_function_to_call)
   {
