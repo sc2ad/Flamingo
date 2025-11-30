@@ -51,7 +51,7 @@ struct HookMetadata {
 
 }  // namespace flamingo
 
-// Custom formatter for flamingo::CallingConvention
+// Custom formatter for flamingo::HookNameMetadata
 template <>
 class fmt::formatter<flamingo::HookNameMetadata> {
  public:
@@ -60,6 +60,6 @@ class fmt::formatter<flamingo::HookNameMetadata> {
   }
   template <typename Context>
   constexpr auto format(flamingo::HookNameMetadata const& metadata, Context& ctx) const {
-    return format_to(ctx.out(), FMT_COMPILE("name: {}"), metadata.name);
+    return fmt::format_to(ctx.out(), "name: {}", metadata.name);
   }
 };

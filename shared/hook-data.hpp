@@ -79,28 +79,30 @@ struct HookInfo {
   }
 
   HookInfo(void* hook_func, void* target, void** orig_ptr, uint16_t num_insts, CallingConvention conv,
-    HookNameMetadata&& name_info, HookPriority&& priority, InstallationMetadata const& install_metadata, std::vector<TypeInfo>&& params, TypeInfo&& return_info)
-: target(target),
- orig_ptr(orig_ptr),
- hook_ptr(hook_func),
- metadata(HookMetadata{
-   .convention = conv,
-   .installation_metadata = install_metadata,
-   .method_num_insts = num_insts,
-   .name_info = name_info,
-   .priority = priority,
+           HookNameMetadata&& name_info, HookPriority&& priority, InstallationMetadata const& install_metadata,
+           std::vector<TypeInfo>&& params, TypeInfo&& return_info)
+      : target(target),
+        orig_ptr(orig_ptr),
+        hook_ptr(hook_func),
+        metadata(HookMetadata{
+          .convention = conv,
+          .installation_metadata = install_metadata,
+          .method_num_insts = num_insts,
+          .name_info = name_info,
+          .priority = priority,
 #ifndef FLAMINGO_NO_REGISTRATION_CHECKS
-   .parameter_info = std::move(params),
-   .return_info = return_info,
+          .parameter_info = std::move(params),
+          .return_info = return_info,
 #endif
- }) {
-}
+        }) {
+  }
 
-HookInfo(void* hook_func, void* target, void** orig_ptr, HookNameMetadata&& name_info, std::vector<TypeInfo>&& params, TypeInfo&& return_info)
+  HookInfo(void* hook_func, void* target, void** orig_ptr, HookNameMetadata&& name_info, std::vector<TypeInfo>&& params,
+           TypeInfo&& return_info)
       : HookInfo(hook_func, target, orig_ptr, kDefaultNumInsts, CallingConvention::Cdecl, std::move(name_info),
                  HookPriority{},
-                 InstallationMetadata{ .need_orig = orig_ptr != nullptr, .is_midpoint = false, .write_prot = false }, std::move(params), std::move(return_info)) {}
-
+                 InstallationMetadata{ .need_orig = orig_ptr != nullptr, .is_midpoint = false, .write_prot = false },
+                 std::move(params), std::move(return_info)) {}
 
   HookInfo(void* hook_func, void* target, void** orig_ptr)
       : HookInfo(hook_func, target, orig_ptr, kDefaultNumInsts, CallingConvention::Cdecl,
@@ -110,6 +112,11 @@ HookInfo(void* hook_func, void* target, void** orig_ptr, HookNameMetadata&& name
   HookInfo(void* hook_func, void* target, void** orig_ptr, HookNameMetadata&& name_info)
       : HookInfo(hook_func, target, orig_ptr, kDefaultNumInsts, CallingConvention::Cdecl, std::move(name_info),
                  HookPriority{},
+                 InstallationMetadata{ .need_orig = orig_ptr != nullptr, .is_midpoint = false, .write_prot = false }) {}
+
+  HookInfo(void* hook_func, void* target, void** orig_ptr, HookNameMetadata&& name_info, HookPriority&& priority)
+      : HookInfo(hook_func, target, orig_ptr, kDefaultNumInsts, CallingConvention::Cdecl, std::move(name_info),
+                 std::move(priority),
                  InstallationMetadata{ .need_orig = orig_ptr != nullptr, .is_midpoint = false, .write_prot = false }) {}
 
   void assign_orig(void* ptr) {
