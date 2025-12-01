@@ -110,7 +110,7 @@ else()
 
     # TODO: Until paper lets us build without exceptions, we don't use paper.
     target_link_options(${COMPILE_ID} PRIVATE -Wl,--exclude-libs,ALL)
-    target_compile_options(${COMPILE_ID} PRIVATE -DFLAMINGO_HEADER_ONLY -fvisibility=hidden -Wall -Wextra -Werror -Wpedantic)
+    target_compile_options(${COMPILE_ID} PRIVATE -DFLAMINGO_LOG_STANDALONE -fvisibility=hidden -Wall -Wextra -Werror -Wpedantic)
 
     target_sources(${COMPILE_ID} PUBLIC ${SOURCE_DIR}/capi.cpp ${SOURCE_DIR}/fixups.cpp ${SOURCE_DIR}/installer.cpp ${SOURCE_DIR}/page-allocator.cpp)
 

@@ -4,8 +4,12 @@
 #define FLAMINGO_VERSION "1.1.1"
 
 #ifdef FLAMINGO_HEADER_ONLY
-
 #define FLAMINGO_EXPORT __attribute__((visibility("hidden")))
+#else  // FLAMINGO_HEADER_ONLY
+#define FLAMINGO_EXPORT __attribute__((visibility("default")))
+#endif
+
+#if defined(FLAMINGO_LOG_STANDALONE) || defined(FLAMINGO_HEADER_ONLY)
 
 #ifdef ANDROID
 #include <android/log.h>
@@ -40,8 +44,7 @@
 #error "Need logging definitions here, for non-ANDROID, header only support!"
 #endif
 
-#else  // FLAMINGO_HEADER_ONLY
-#define FLAMINGO_EXPORT __attribute__((visibility("default")))
+#else  // FLAMINGO_LOG_STANDALONE
 
 #include <cassert>
 
