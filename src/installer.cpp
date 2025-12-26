@@ -8,6 +8,9 @@
 #include <span>
 #include <unordered_map>
 #include <variant>
+
+#include <fmt/ranges.h>
+
 #include "fixups.hpp"
 #include "hook-data.hpp"
 #include "hook-installation-result.hpp"
@@ -62,95 +65,125 @@ void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
 
   // A before B == B after A
   // HookInfo after strings
+  // this graph represents all the hooks and their before dependencies
+  // key must be before values
   std::unordered_map<HookNameMetadata, std::vector<HookNameMetadata>, HookNameMetadataHash> graph;
   graph.reserve(hooks.size());
+
+  // finds all hooks that match the given filter
+  auto findMatches = [&](HookNameFilter const& filter, HookNameMetadata self) {
+    std::vector<HookNameMetadata> matches;
+    matches.reserve(1);
+    for (auto const& hook : hooks) {
+      auto const& name = hook.metadata.name_info;
+      // exclude self
+      if (name == self) continue;
+      if (name.matches(filter)) matches.push_back(name);
+    }
+    return matches;
+  };
 
   //
   for (auto const& hook : hooks) {
     // build afters first
-    {
-      auto& afters = graph[hook.metadata.name_info];
-      for (auto const& after : hook.metadata.priority.afters) {
-        afters.push_back(after);
+    // If this hook specifies that it must come after some other hooks (A),
+    // then we must add edges A -> this_hook in the graph (so that A precedes this).
+    for (auto const& afterFilter : hook.metadata.priority.afters) {
+      auto matches = findMatches(afterFilter, hook.metadata.name_info);
+      for (auto const& matched : matches) {
+        graph[matched].push_back(hook.metadata.name_info);
       }
     }
 
     // now build from befores
-    // iterate all hooks, find the ones that match our befores
-    for (auto const& before : hook.metadata.priority.befores) {
-      // If we found it, add ourselves to its after list
-      graph[before].push_back(hook.metadata.name_info);
+    // If this hook requests to be before some matched hooks, add edges current -> matched
+    for (auto const& beforeFilter : hook.metadata.priority.befores) {
+      auto matches = findMatches(beforeFilter, hook.metadata.name_info);
+      for (auto const& matched_before : matches) {
+        graph[hook.metadata.name_info].push_back(matched_before);
+      }
     }
   }
 
   // now topogologically sort in place
   // topological sort should use HookNameMetadata.matches(HookNameMetadata const& other) for matching
-  // we use Kahn's algorithm (https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm)
-  // 1. Compute indegree of each node
-  // 2. Initialize a queue with all nodes of indegree 0
-  // 3. While the queue is not empty:
-  //    a. Pop a node from the queue, add it to the sorted list
-  //    b. For each of its neighbors, decrease their indegree by 1
-  //    c. If any neighbor's indegree becomes 0, add it to the queue
-  std::unordered_map<HookNameMetadata, int, HookNameMetadataHash> indegree;
-  for (auto const& [name, _] : graph) {
-    indegree[name] = 0;
-  }
-
-  // count incoming edges
+  // we cannot invalidate list iterators
+  // for hooks with cycle, we keep them in their original order
+  // we use Kahn's algorithm for topological sorting
+  // https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm
+  std::list<HookInfo> sorted_hooks;
+  std::unordered_map<HookNameMetadata, int, HookNameMetadataHash> in_degree;
   for (auto const& [name, afters] : graph) {
-    for (auto const& dep : afters) {
-      auto jt = std::ranges::find_if(graph, [&](auto const& p) { return p.first.matches(dep); });
+    // ensure in_degree entry exists with at least 0
+    in_degree.try_emplace(name, 0);
 
-      if (jt != graph.end()) {
-        indegree[jt->first]++;
+    for (auto const& after : afters) {
+      in_degree[after]++;
+    }
+  }
+
+  // Ensure every hook is represented in in_degree (isolated nodes should have degree 0)
+  for (auto const& [name, itr] : name_to_iterator) {
+    in_degree.try_emplace(name, 0);
+  }
+
+  // find all nodes with in_degree 0, preserving the original hooks list order
+  std::queue<HookNameMetadata> zero_in_degree;
+  for (auto const& hook : hooks) {
+    auto it_deg = in_degree.find(hook.metadata.name_info);
+    if (it_deg != in_degree.end() && it_deg->second == 0) {
+      zero_in_degree.push(hook.metadata.name_info);
+    }
+  }
+
+  while (!zero_in_degree.empty()) {
+    auto current_name = zero_in_degree.front();
+    zero_in_degree.pop();
+
+    // find the iterator for this name
+    auto it = name_to_iterator.find(current_name);
+    if (it != name_to_iterator.end()) {
+      // move to sorted_hooks
+      sorted_hooks.splice(sorted_hooks.end(), hooks, it->second);
+    }
+
+    // decrease in_degree of afters
+    auto const& afters = graph[current_name];
+    for (auto const& after : afters) {
+      in_degree[after]--;
+      if (in_degree[after] == 0) {
+        zero_in_degree.push(after);
       }
     }
   }
 
-  std::queue<HookNameMetadata> q;
-
-  // start with indegree 0
-  for (auto const& [name, deg] : indegree) {
-    if (deg == 0) {
-      q.push(name);
+  {
+    std::vector<std::string_view> hook_names;
+    hook_names.reserve(sorted_hooks.size());
+    for (auto const& hook : sorted_hooks) {
+      hook_names.push_back(hook.metadata.name_info.name);
     }
+    FLAMINGO_DEBUG("Flattened hook order after topological sort attempt: {}", fmt::join(hook_names, " -> "));
   }
 
-  // we sort in place
-  while (!q.empty()) {
-    auto u = q.front();
-    q.pop();
-    auto it = name_to_iterator[u];
-
-    // splice this node to the end of the list in order
-    hooks.splice(hooks.end(), hooks, it);
-
-    for (auto const& dep : graph[u]) {
-      auto jt = std::ranges::find_if(graph, [&](auto const& p) { return p.first.matches(dep); });
-
-      if (jt == graph.end()) {
-        continue;
-      }
-
-      if (--indegree[jt->first] == 0) {
-        q.push(jt->first);
-      }
-    }
+  // now, any remaining hooks in `hooks` are part of cycles
+  // append them in their original order and log a warning. Splicing invalidates
+  // iterators, so consume from the front until empty to preserve original order.
+  while (!hooks.empty()) {
+    auto it = hooks.begin();
+    auto const& hook = *it;
+    sorted_hooks.splice(sorted_hooks.end(), hooks, it);
+    FLAMINGO_CRITICAL(
+        "Detected cycle in hook priorities involving hook name: {}. Hooks involved in the cycle will remain in their original order.",
+        hook.metadata.name_info);
+    FLAMINGO_CRITICAL("After priorities for this hook were: {}",
+                     fmt::join(hook.metadata.priority.afters, ", "));
+    FLAMINGO_CRITICAL("Before priorities for this hook were: {}",
+                     fmt::join(hook.metadata.priority.befores, ", "));
   }
 
-  // check cycle
-  // After processing, skip nodes with indegree > 0 (cycles)
-  for (auto it = hooks.begin(); it != hooks.end();) {
-    if (indegree[it->metadata.name_info] > 0) {
-      FLAMINGO_CRITICAL(
-           "Cycle detected in hook priorities involving hook: {}. Skipping installation of this hook.",
-           it->metadata.name_info.name.c_str());
-      it = hooks.erase(it);  // remove from list
-    } else {
-      ++it;
-    }
-  }
+  // replace original list with the sorted result using swap to avoid reallocation
+  hooks.swap(sorted_hooks);
 }
 
 Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_suitable_priority_location_for(
