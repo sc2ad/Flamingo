@@ -30,6 +30,11 @@ struct HookNameMetadata {
   [[nodiscard]] bool matches(HookNameMetadata const& other) const {
     return (name == other.name) || (namespaze == other.namespaze);
   }
+
+  [[nodiscard]]
+  bool operator==(HookNameMetadata const& other) const {
+    return (name == other.name) && (namespaze == other.namespaze);
+  }
 };
 
 /// @brief Represents a priority for how to align hook orderings. Note that a change in priority MAY require a full list

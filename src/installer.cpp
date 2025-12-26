@@ -6,6 +6,7 @@
 #include <map>
 #include <queue>
 #include <span>
+#include <unordered_map>
 #include <variant>
 #include "fixups.hpp"
 #include "hook-data.hpp"
@@ -26,17 +27,11 @@ using namespace flamingo;
 /// @brief The set of all targets hooked. An ordered map so we can perform large-scale walks by doing binary search.
 inline static std::map<TargetDescriptor, TargetData> targets;
 
-std::priority_queue<HookInfo*> prioritizeHooks(std::list<HookInfo>& hooks) {
-  auto comp = [](HookInfo& a, HookInfo& b) {
-    // Simple heuristic: Hooks with more 'befores' have higher priority
-    return a.metadata.priority.befores.size() < b.metadata.priority.befores.size();
-  };
-  std::priority_queue<HookInfo&, std::vector<HookInfo&>, decltype(comp)> pq(comp);
-  for (auto& hook : hooks) {
-    pq.push(hook);
+struct HookNameMetadataHash {
+  std::size_t operator()(HookNameMetadata const& k) const {
+    return std::hash<std::string>()(k.name) ^ (std::hash<std::string>()(k.namespaze) << 1);
   }
-  return pq;
-}
+};
 
 /// @brief Topologically sorts the provided hooks by their priority constraints.
 void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
@@ -55,31 +50,107 @@ void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
     hooks.splice(hooks.end(), hooks, it);
   }
 
-  // now sort the non-final hooks based on their after/before constraints
-  std::stable_sort(hooks.begin(), hooks.end(), [](HookInfo const& a, HookInfo const& b) {
-    // Check if 'a' should come before 'b'
-    bool a_before_b = std::ranges::any_of(a.metadata.priority.befores, [&](HookNameMetadata const& name) {
-      return name.matches(b.metadata.name_info);
-    });
-    // Check if 'b' should come before 'a'
-    bool b_before_a = std::ranges::any_of(b.metadata.priority.befores, [&](HookNameMetadata const& name) {
-      return name.matches(a.metadata.name_info);
-    });
-    if (a_before_b && !b_before_a) {
-      return true;
-    }
-    if (b_before_a && !a_before_b) {
-      return false;
+  // now build topological graph
+  // each hook has a requirement to be after certain other hooks in this graph
+  // we also convert before requirements to after requirements for easier processing
+
+  // build name to iterator map
+  std::unordered_map<HookNameMetadata, std::list<HookInfo>::iterator, HookNameMetadataHash> name_to_iterator;
+  for (auto it = hooks.begin(); it != hooks.end(); ++it) {
+    name_to_iterator[it->metadata.name_info] = it;
+  }
+
+  // A before B == B after A
+  // HookInfo after strings
+  std::unordered_map<HookNameMetadata, std::vector<HookNameMetadata>, HookNameMetadataHash> graph;
+  graph.reserve(hooks.size());
+
+  //
+  for (auto const& hook : hooks) {
+    // build afters first
+    {
+      auto& afters = graph[hook.metadata.name_info];
+      for (auto const& after : hook.metadata.priority.afters) {
+        afters.push_back(after);
+      }
     }
 
-    if (a_before_b && b_before_a) {
-      // Conflict detected
-      FLAMINGO_DEBUG("Conflict in hook priorities between '{}' and '{}'. Maintaining original order.",
-                        a.metadata.name_info, b.metadata.name_info);
+    // now build from befores
+    // iterate all hooks, find the ones that match our befores
+    for (auto const& before : hook.metadata.priority.befores) {
+      // If we found it, add ourselves to its after list
+      graph[before].push_back(hook.metadata.name_info);
     }
-    // If neither or both are true, maintain original order
-    return false;
-  });
+  }
+
+  // now topogologically sort in place
+  // topological sort should use HookNameMetadata.matches(HookNameMetadata const& other) for matching
+  // we use Kahn's algorithm (https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm)
+  // 1. Compute indegree of each node
+  // 2. Initialize a queue with all nodes of indegree 0
+  // 3. While the queue is not empty:
+  //    a. Pop a node from the queue, add it to the sorted list
+  //    b. For each of its neighbors, decrease their indegree by 1
+  //    c. If any neighbor's indegree becomes 0, add it to the queue
+  std::unordered_map<HookNameMetadata, int, HookNameMetadataHash> indegree;
+  for (auto const& [name, _] : graph) {
+    indegree[name] = 0;
+  }
+
+  // count incoming edges
+  for (auto const& [name, afters] : graph) {
+    for (auto const& dep : afters) {
+      auto jt = std::ranges::find_if(graph, [&](auto const& p) { return p.first.matches(dep); });
+
+      if (jt != graph.end()) {
+        indegree[jt->first]++;
+      }
+    }
+  }
+
+  std::queue<HookNameMetadata> q;
+
+  // start with indegree 0
+  for (auto const& [name, deg] : indegree) {
+    if (deg == 0) {
+      q.push(name);
+    }
+  }
+
+  // we sort in place
+  while (!q.empty()) {
+    auto u = q.front();
+    q.pop();
+    auto it = name_to_iterator[u];
+
+    // splice this node to the end of the list in order
+    hooks.splice(hooks.end(), hooks, it);
+
+    for (auto const& dep : graph[u]) {
+      auto jt = std::ranges::find_if(graph, [&](auto const& p) { return p.first.matches(dep); });
+
+      if (jt == graph.end()) {
+        continue;
+      }
+
+      if (--indegree[jt->first] == 0) {
+        q.push(jt->first);
+      }
+    }
+  }
+
+  // check cycle
+  // After processing, skip nodes with indegree > 0 (cycles)
+  for (auto it = hooks.begin(); it != hooks.end();) {
+    if (indegree[it->metadata.name_info] > 0) {
+      FLAMINGO_CRITICAL(
+           "Cycle detected in hook priorities involving hook: {}. Skipping installation of this hook.",
+           it->metadata.name_info.name.c_str());
+      it = hooks.erase(it);  // remove from list
+    } else {
+      ++it;
+    }
+  }
 }
 
 Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_suitable_priority_location_for(
@@ -93,6 +164,7 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
   // - First, walk all the hooks for a viable location, if we can find one. If we cannot, then we have to recompile
   // hooks.
   // TODO: Above
+  topological_sort_hooks_by_priority(hooks);
   // Also, if we have a final priority, we need to be the final hook, unless that hook is itself already marked as
   // final.
   if (hook_to_install.priority.is_final) {
