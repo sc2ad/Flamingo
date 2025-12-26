@@ -22,9 +22,12 @@
           "pwsh ./build-android-test.ps1"
         ]
       },
-      "qmodIncludeDirs": [],
+      "ndk": "^29.0.14206865",
+      "qmodIncludeDirs": [
+        "./build"
+      ],
       "qmodIncludeFiles": [],
-      "qmodOutput": null
+      "qmodOutput": "flamingo.qmod"
     },
     "dependencies": [
       {
@@ -45,25 +48,13 @@
         "id": "scotland2",
         "versionRange": "^0.1.6",
         "additionalData": {
-          "includeQmod": false
+          "includeQmod": false,
+          "private": true
         }
       }
     ]
   },
   "restoredDependencies": [
-    {
-      "dependency": {
-        "id": "scotland2",
-        "versionRange": "=0.1.6",
-        "additionalData": {
-          "soLink": "https://github.com/sc2ad/scotland2/releases/download/v0.1.6/libsl2.so",
-          "debugSoLink": "https://github.com/sc2ad/scotland2/releases/download/v0.1.6/debug_libsl2.so",
-          "overrideSoName": "libsl2.so",
-          "branchName": "version/v0_1_6"
-        }
-      },
-      "version": "0.1.6"
-    },
     {
       "dependency": {
         "id": "fmt",
@@ -94,6 +85,19 @@
         }
       },
       "version": "0.1.0"
+    },
+    {
+      "dependency": {
+        "id": "scotland2",
+        "versionRange": "=0.1.7",
+        "additionalData": {
+          "soLink": "https://github.com/sc2ad/scotland2/releases/download/v0.1.7/libsl2.so",
+          "debugSoLink": "https://github.com/sc2ad/scotland2/releases/download/v0.1.7/debug_libsl2.so",
+          "overrideSoName": "libsl2.so",
+          "branchName": "version/v0_1_7"
+        }
+      },
+      "version": "0.1.7"
     }
   ]
 }

@@ -29,10 +29,12 @@
 // - Dump the trampoline
 // - Dump the new hook
 // Perhaps we make TestWrapper take a Fixups instance for this? That way we can do all three of those.
-#define ERROR(S, ...)                              \
-  fmt::print(stderr, FMT_COMPILE(S), __VA_ARGS__); \
-  fmt::print(stderr, "\n");                        \
-  std::exit(1);
+#define ERROR(S, ...)                     \
+  do {                                    \
+    fmt::print(stderr, S, ##__VA_ARGS__); \
+    fmt::print(stderr, "\n");             \
+    std::exit(1);                         \
+  } while (0)
 
 // Converts a pointer to data into the next 64b multiple for use with tests with differing alignments.
 int64_t round_up8(auto* ptr) {

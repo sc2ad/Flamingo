@@ -21,6 +21,7 @@
         "pwsh ./build-android-test.ps1"
       ]
     },
+    "ndk": "^29.0.14206865",
     "qmodIncludeDirs": [
       "./build"
     ],

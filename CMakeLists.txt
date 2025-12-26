@@ -92,10 +92,14 @@ if (TEST_BUILD)
 
     add_executable(api-test ${CMAKE_CURRENT_SOURCE_DIR}/test/api.cpp)
     target_link_libraries(api-test PRIVATE flamingo-static)
+
+    add_executable(sorting-test ${CMAKE_CURRENT_SOURCE_DIR}/test/sorted-hooks.cpp)
+    target_link_libraries(sorting-test PRIVATE flamingo-static)
     include(CTest)
 
     add_test(fixups fixup-test)
     add_test(apis api-test)
+    add_test(sorting sorting-test)
 else()
     include(qpm_defines.cmake)
     project(${COMPILE_ID})
