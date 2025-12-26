@@ -24,6 +24,12 @@ struct InstallationMetadata {
 /// Lookups are described using userdata when the HookInfo is made at first.
 struct HookNameMetadata {
   std::string name{};
+  std::string namespaze{};
+
+  /// @brief Checks if this name metadata matches another (either by name or namespace)
+  [[nodiscard]] bool matches(HookNameMetadata const& other) const {
+    return (name == other.name) || (namespaze == other.namespaze);
+  }
 };
 
 /// @brief Represents a priority for how to align hook orderings. Note that a change in priority MAY require a full list

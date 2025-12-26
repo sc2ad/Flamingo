@@ -98,6 +98,9 @@ FlamingoUninstallResult convert_uninstall_result(flamingo::Result<bool, bool> co
 FLAMINGO_C_EXPORT FlamingoNameInfo* flamingo_make_name(char const* name_str) {
   return reinterpret_cast<FlamingoNameInfo*>(new flamingo::HookNameMetadata{ .name = name_str });
 }
+FLAMINGO_C_EXPORT FlamingoNameInfo* flamingo_make_name_namespaced(char const* name_str, char const* namespaze_str) {
+  return reinterpret_cast<FlamingoNameInfo*>(new flamingo::HookNameMetadata{ .name = name_str, .namespaze = namespaze_str });
+}
 
 FLAMINGO_C_EXPORT FlamingoHookPriority* flamingo_make_priority(FlamingoNameInfo** before_names, size_t num_befores,
                                                                FlamingoNameInfo** after_names, size_t num_afters, bool is_final) {
