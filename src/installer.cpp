@@ -4,6 +4,7 @@
 #include <iterator>
 #include <list>
 #include <map>
+#include <queue>
 #include <span>
 #include <variant>
 #include "fixups.hpp"
@@ -25,6 +26,62 @@ using namespace flamingo;
 /// @brief The set of all targets hooked. An ordered map so we can perform large-scale walks by doing binary search.
 inline static std::map<TargetDescriptor, TargetData> targets;
 
+std::priority_queue<HookInfo*> prioritizeHooks(std::list<HookInfo>& hooks) {
+  auto comp = [](HookInfo& a, HookInfo& b) {
+    // Simple heuristic: Hooks with more 'befores' have higher priority
+    return a.metadata.priority.befores.size() < b.metadata.priority.befores.size();
+  };
+  std::priority_queue<HookInfo&, std::vector<HookInfo&>, decltype(comp)> pq(comp);
+  for (auto& hook : hooks) {
+    pq.push(hook);
+  }
+  return pq;
+}
+
+/// @brief Topologically sorts the provided hooks by their priority constraints.
+void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
+  if (hooks.empty()) {
+    return;
+  }
+  // Ensure any "final" priority hooks are placed at the end while preserving relative order.
+  std::vector<std::list<HookInfo>::iterator> finals;
+  finals.reserve(std::distance(hooks.begin(), hooks.end()));
+  for (auto it = hooks.begin(); it != hooks.end(); ++it) {
+    if (it->metadata.priority.is_final) {
+      finals.push_back(it);
+    }
+  }
+  for (auto& it : finals) {
+    hooks.splice(hooks.end(), hooks, it);
+  }
+
+  // now sort the non-final hooks based on their after/before constraints
+  std::stable_sort(hooks.begin(), hooks.end(), [](HookInfo const& a, HookInfo const& b) {
+    // Check if 'a' should come before 'b'
+    bool a_before_b = std::ranges::any_of(a.metadata.priority.befores, [&](HookNameMetadata const& name) {
+      return name.matches(b.metadata.name_info);
+    });
+    // Check if 'b' should come before 'a'
+    bool b_before_a = std::ranges::any_of(b.metadata.priority.befores, [&](HookNameMetadata const& name) {
+      return name.matches(a.metadata.name_info);
+    });
+    if (a_before_b && !b_before_a) {
+      return true;
+    }
+    if (b_before_a && !a_before_b) {
+      return false;
+    }
+
+    if (a_before_b && b_before_a) {
+      // Conflict detected
+      FLAMINGO_DEBUG("Conflict in hook priorities between '{}' and '{}'. Maintaining original order.",
+                        a.metadata.name_info, b.metadata.name_info);
+    }
+    // If neither or both are true, maintain original order
+    return false;
+  });
+}
+
 Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_suitable_priority_location_for(
     std::list<HookInfo>& hooks, HookMetadata const& hook_to_install) {
   using ResultT = Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities>;
@@ -42,7 +99,8 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
     if (!hooks.empty() && hooks.back().metadata.priority.is_final) {
       // We cannot install here, we have a conflict
       return ResultT::Err(installation::TargetBadPriorities{
-        hook_to_install, fmt::format("Cannot install a 'final' hook after another 'final' hook with name: {}", hooks.back().metadata.name_info) });
+        hook_to_install, fmt::format("Cannot install a 'final' hook after another 'final' hook with name: {}",
+                                     hooks.back().metadata.name_info) });
     }
     // Select the end to install at
     return ResultT::Ok(hooks.end());
