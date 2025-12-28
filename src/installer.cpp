@@ -53,6 +53,15 @@ void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
     hooks.splice(hooks.end(), hooks, it);
   }
 
+  {
+    std::vector<std::string_view> hook_names;
+    hook_names.reserve(hooks.size());
+    for (auto const& hook : hooks) {
+      hook_names.push_back(hook.metadata.name_info.name);
+    }
+    FLAMINGO_DEBUG("Initial hook order before topological sort: {}", fmt::join(hook_names, " -> "));
+  }
+
   // now build topological graph
   // each hook has a requirement to be after certain other hooks in this graph
   // we also convert before requirements to after requirements for easier processing
@@ -174,16 +183,23 @@ void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
     auto const& hook = *it;
     sorted_hooks.splice(sorted_hooks.end(), hooks, it);
     FLAMINGO_CRITICAL(
-        "Detected cycle in hook priorities involving hook name: {}. Hooks involved in the cycle will remain in their original order.",
+        "Detected cycle in hook priorities involving hook name: {}. Hooks involved in the cycle will remain in their "
+        "original order.",
         hook.metadata.name_info);
-    FLAMINGO_CRITICAL("After priorities for this hook were: {}",
-                     fmt::join(hook.metadata.priority.afters, ", "));
-    FLAMINGO_CRITICAL("Before priorities for this hook were: {}",
-                     fmt::join(hook.metadata.priority.befores, ", "));
+    FLAMINGO_CRITICAL("After priorities for this hook were: {}", fmt::join(hook.metadata.priority.afters, ", "));
+    FLAMINGO_CRITICAL("Before priorities for this hook were: {}", fmt::join(hook.metadata.priority.befores, ", "));
   }
 
   // replace original list with the sorted result using swap to avoid reallocation
   hooks.swap(sorted_hooks);
+  {
+    std::vector<std::string_view> hook_names;
+    hook_names.reserve(hooks.size());
+    for (auto const& hook : hooks) {
+      hook_names.push_back(hook.metadata.name_info.name);
+    }
+    FLAMINGO_DEBUG("Final hook order after topological sort: {}", fmt::join(hook_names, " -> "));
+  }
 }
 
 Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_suitable_priority_location_for(
@@ -197,7 +213,12 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
   // - First, walk all the hooks for a viable location, if we can find one. If we cannot, then we have to recompile
   // hooks.
   // TODO: Above
-  topological_sort_hooks_by_priority(hooks);
+
+  // Figure out 3 possible scenarios
+  // if incoming is final, we must be at the end (unless the end is also final, then error)
+  // if existing hooks have priority constraints that depend on us, we need to respect those (topologically sort)
+  // otherwise, we can install at the first suitable location that fits
+
   // Also, if we have a final priority, we need to be the final hook, unless that hook is itself already marked as
   // final.
   if (hook_to_install.priority.is_final) {
@@ -210,8 +231,63 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
     // Select the end to install at
     return ResultT::Ok(hooks.end());
   }
-  // Otherwise, just install it at the front.
-  return ResultT::Ok(hooks.begin());
+
+  // ok now we have a non-final hook
+  // if existing hooks have priority constraints that depend on us, we need to respect those
+  // therefore topological
+
+  bool requires_sort = false;
+  for (auto const& existing_hook : hooks) {
+    // if existing_hook requests to be after us, we cannot install after it
+    for (auto const& after_filter : existing_hook.metadata.priority.afters) {
+      if (after_filter.matches(hook_to_install.name_info)) {
+        requires_sort = true;
+        break;
+      }
+      // if existing_hook requests to be before us, we cannot install before it
+      for (auto const& before_filter : existing_hook.metadata.priority.befores) {
+        if (before_filter.matches(hook_to_install.name_info)) {
+          requires_sort = true;
+          break;
+        }
+      }
+    }
+  }
+
+  // if no priority constraints affect us, we can install at the first suitable location that fits
+  if (requires_sort) {
+    // if our hook has priority constraints, we need to topologically sort and find a suitable location
+    topological_sort_hooks_by_priority(hooks);
+
+    // Otherwise, install at the end to preserve the relative order of previously-installed hooks
+    FLAMINGO_ABORT("Priority-based installation requiring reordering is not yet implemented");
+  }
+
+  // linear search for first suitable location
+  for (auto it = hooks.begin(); it != hooks.end(); ++it) {
+    bool can_install_before = true;
+    // if we want to be after any existing hook, we cannot install before it
+    for (auto const& after_filter : hook_to_install.priority.afters) {
+      if (after_filter.matches(hook_to_install.name_info)) {
+        can_install_before = false;
+        break;
+      }
+    }
+    if (!can_install_before) {
+      continue;
+    }
+
+    // TODO: if we want to be before any existing hook, we cannot install after it
+    // (this requires lookahead, so we skip for now)
+    // maybe we can assume this should never happen for now?
+
+    if (can_install_before) {
+      return ResultT::Ok(it);
+    }
+  }
+
+  // If we could not find any suitable location, install at the end
+  return ResultT::Ok(hooks.end());
 }
 
 Result<std::monostate, installation::TargetMismatch> validate_install_metadata(TargetMetadata& existing,
