@@ -91,6 +91,16 @@ typedef struct FlamingoInstallationMetadata FlamingoInstallationMetadata;
 /// @brief Opaque pointer around a flamingo::TypeInfo
 typedef struct FlamingoTypeInfo FlamingoTypeInfo;
 
+/// @brief C representation of a hook entry returned by query APIs.
+/// Fields owning strings (`name` and `namespaze`) are allocated by the API
+/// and must be freed with `flamingo_free_strings` if non-null.
+typedef struct {
+  void* hook_ptr;    ///< Pointer to the hook function
+  void* orig_ptr;    ///< Pointer to the original/trampoline function or NULL
+  char* name;        ///< Nullable, malloc'd C string for the hook's name
+  char* namespaze;   ///< Nullable, malloc'd C string for the hook's namespace
+} FlamingoHookInfo;
+
 /// @brief Returned from a call to query if a region is hooked, and what the original instructions at that location are.
 /// Should not be stored for long-term use, since the lifetime of the result is tied to the lifetime of the hooks at
 /// this location.
@@ -248,6 +258,21 @@ FLAMINGO_C_EXPORT FlamingoUninstallResult flamingo_uninstall_hook(FlamingoHookHa
 /// @brief Given an installation error, formats a human-readable error message and writes it to the provided string, not
 /// exceeding the size provided.
 FLAMINGO_C_EXPORT_VOID void flamingo_format_error(FlamingoInstallErrorData* error, char* buffer, size_t buffer_size);
+
+/// @brief Returns the number of hooks installed at `target`. Returns 0 if none or if target is not hooked.
+FLAMINGO_C_EXPORT size_t flamingo_get_hook_count(uint32_t* target);
+
+/// @brief Fills the provided `hooks` array with `FlamingoHookInfo` entries for `target`.
+/// If `capacity` is smaller than the number of hooks, the function returns the required size but does not write
+/// beyond `capacity` elements.
+/// The `name` and `namespaze` fields inside each written `FlamingoHookInfo` are allocated with `malloc` and must
+/// be freed with `flamingo_free_strings` (pass an array of the `name` pointers or `namespaze` pointers respectively).
+FLAMINGO_C_EXPORT size_t flamingo_get_hooks(uint32_t* target, FlamingoHookInfo** hooks);
+
+/// @brief Frees an array of `FlamingoHookInfo` strings allocated by `flamingo_get_hooks`.
+/// @param hooks The array of `FlamingoHookInfo` hooks to free.
+/// @param length The length of the `hooks` array.
+FLAMINGO_C_EXPORT_VOID void flamingo_free_hooks_array(FlamingoHookInfo* hooks, int length);
 
 #ifdef __cplusplus
 }

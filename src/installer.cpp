@@ -398,6 +398,14 @@ Result<std::monostate, installation::TargetMismatch> validate_install_metadata(T
 }  // namespace
 
 namespace flamingo {
+std::optional<TargetData const> TargetDataFor(TargetDescriptor target) {
+  auto it = targets.find(target);
+  if (it == targets.end()) {
+    return std::nullopt;
+  }
+  return it->second;
+}
+
 installation::Result Install(HookInfo&& hook) {
   // Null targets to install to are prohibited, but null hook functions are allowed (and will most likely cause
   // horrible crashes when called)

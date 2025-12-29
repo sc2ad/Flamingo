@@ -1,6 +1,8 @@
 #include "capi.h"
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <utility>
 #include <variant>
 #include "calling-convention.hpp"
@@ -247,4 +249,62 @@ FLAMINGO_C_EXPORT_VOID void flamingo_format_error(FlamingoInstallErrorData* erro
   auto [out, _] = fmt::format_to_n(buffer, buffer_size - 1, "{}", *install_error);
   *out = '\0';  // Suffix with a null
   delete install_error;
+}
+
+FLAMINGO_C_EXPORT size_t flamingo_get_hook_count(uint32_t* target) {
+  auto res = flamingo::TargetDataFor(flamingo::TargetDescriptor{ .target = target });
+  if (!res.has_value()) return 0;
+  return res.value().hooks.size();
+}
+
+FLAMINGO_C_EXPORT size_t flamingo_get_hooks(uint32_t* target, FlamingoHookInfo** hooks) {
+  auto res = flamingo::TargetDataFor(flamingo::TargetDescriptor{ .target = target });
+  if (!res.has_value()) return 0;
+  if (hooks == nullptr) return 0;
+
+  auto const& list = res.value().hooks;
+
+  *hooks = reinterpret_cast<FlamingoHookInfo*>(std::malloc(sizeof(FlamingoHookInfo) * list.size()));
+
+  size_t index = 0;
+  for (auto const& hook_info : list) {
+    auto& out_info = (*hooks)[index];
+    out_info.hook_ptr = hook_info.hook_ptr;
+    out_info.orig_ptr = hook_info.orig_ptr;
+
+    auto const& name_info = hook_info.metadata.name_info;
+
+    if (!name_info.name.empty()) {
+      out_info.name = reinterpret_cast<char*>(std::malloc(name_info.name.size() + 1));
+      std::strcpy(out_info.name, name_info.name.c_str());
+    } else {
+      out_info.name = nullptr;
+    }
+    if (!name_info.namespaze.empty()) {
+      out_info.namespaze = reinterpret_cast<char*>(std::malloc(name_info.namespaze.size() + 1));
+      std::strcpy(out_info.namespaze, name_info.namespaze.c_str());
+    } else {
+      out_info.namespaze = nullptr;
+    }
+    index++;
+  }
+
+  return list.size();
+}
+
+FLAMINGO_C_EXPORT_VOID void flamingo_free_hooks_array(FlamingoHookInfo* hooks, size_t length) {
+  if (hooks == nullptr) return;
+
+  // free hooks name and namespaze
+  for (size_t i = 0; i < length; i++) {
+    auto& hook_info = hooks[i];
+    if (hook_info.name != nullptr) {
+      std::free(hook_info.name);
+    }
+    if (hook_info.namespaze != nullptr) {
+      std::free(hook_info.namespaze);
+    }
+  }
+
+  free(hooks);
 }
