@@ -516,12 +516,12 @@ Result<bool, installation::Error> Reinstall(TargetDescriptor target) {
   if (itr->second.metadata.metadata.need_orig) {
     itr->second.fixups.PerformFixupsAndCallback();
   }
-  // topo sort hooks by priority
-  topological_sort_hooks_by_priority(itr->second.hooks);
-  // Recompile all hooks to ensure orig pointers are correct
-  recompile_hooks(itr->second.hooks, target);
-
-
+  // Perform the write of the jump to the first hook
+  itr->second.fixups.target.WriteJump(itr->second.hooks.begin()->hook_ptr);
+  // Note that we do NOT reconstruct all of the inner hook pointers between each hook.
+  // This is done as a partial optimization, but at some point we should revisit this (and adjust the docstring comment
+  // to match)
+  // TODO: Above
   return RetType::Ok(true);
 }
 
