@@ -41,10 +41,6 @@ struct HookNameMetadataHash {
 /// @param hooks The list of hooks to sort in place.
 /// @return The sorted list of hooks that have cycles.
 std::list<HookInfo> topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
-  if (hooks.empty()) {
-    return {};
-  }
-
   // Ensure any "final" priority hooks are placed at the end while preserving relative order.
   std::vector<std::list<HookInfo>::iterator> finals;
   finals.reserve(std::distance(hooks.begin(), hooks.end()));
@@ -249,8 +245,12 @@ void recompile_hooks(std::list<HookInfo>& hooks, TargetDescriptor const& target_
                       : reinterpret_cast<void*>(&no_fixups));
 }
 
+/// @brief Finds a suitable location to install the given hook on the target, respecting priority constraints.
+/// @param hooks The list of hooks currently installed on the target.
+/// @param hook_to_install The hook to install.
+/// @return An iterator to the location where the hook was installed, or an error if installation is not possible.
 Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_suitable_priority_location_for(
-    std::list<HookInfo>& hooks, HookMetadata const& hook_to_install, TargetDescriptor const& target) {
+    std::list<HookInfo>& hooks, HookInfo&& hook_to_install) {
   using ResultT = Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities>;
   // Install onto the target, respecting priorities.
   // Note that we may need to recompile some callbacks/fixups to change things
@@ -267,15 +267,17 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
 
   // Also, if we have a final priority, we need to be the final hook, unless that hook is itself already marked as
   // final.
-  if (hook_to_install.priority.is_final) {
+  if (hook_to_install.metadata.priority.is_final) {
     if (!hooks.empty() && hooks.back().metadata.priority.is_final) {
       // We cannot install here, we have a conflict
       return ResultT::Err(installation::TargetBadPriorities{
-        hook_to_install, fmt::format("Cannot install a 'final' hook after another 'final' hook with name: {}",
-                                     hooks.back().metadata.name_info) });
+        hook_to_install.metadata, fmt::format("Cannot install a 'final' hook after another 'final' hook with name: {}",
+                                              hooks.back().metadata.name_info) });
     }
     // Select the end to install at
-    return ResultT::Ok(hooks.end());
+
+    auto new_it = hooks.emplace(hooks.end(), std::move(hook_to_install));
+    return ResultT::Ok(new_it);
   }
 
   // ok now we have a non-final hook
@@ -283,38 +285,36 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
   // therefore topological
 
   // If the incoming hook has any priority constraints, we may need a topological pass.
-  bool requires_sort = !hook_to_install.priority.afters.empty() || !hook_to_install.priority.befores.empty();
+  bool requires_sort =
+      !hook_to_install.metadata.priority.afters.empty() || !hook_to_install.metadata.priority.befores.empty();
 
   // If any existing hook has constraints that reference the incoming hook, we must sort.
   for (auto const& existing_hook : hooks) {
     for (auto const& after_filter : existing_hook.metadata.priority.afters) {
-      if (after_filter.matches(hook_to_install.name_info)) {
+      if (after_filter.matches(hook_to_install.metadata.name_info)) {
         requires_sort = true;
         break;
       }
     }
     // if existing_hook requests to be before us, we cannot install before it
     for (auto const& before_filter : existing_hook.metadata.priority.befores) {
-      if (before_filter.matches(hook_to_install.name_info)) {
+      if (before_filter.matches(hook_to_install.metadata.name_info)) {
         requires_sort = true;
         break;
       }
     }
-    if (requires_sort) break;
+    if (requires_sort) {
+      break;
+    }
   }
 
   // if we require a sort, do it then recompile
   if (requires_sort) {
+    TargetDescriptor target{ hook_to_install.target };
     // Insert the new hook first so we can let topo sort place it correctly
-    HookInfo dumbHook(nullptr, nullptr, nullptr);
-    dumbHook.metadata = hook_to_install;
-    auto newIt = hooks.insert(hooks.end(), std::move(dumbHook));
+    auto newIt = hooks.insert(hooks.begin(), std::move(hook_to_install));
     // if our hook has priority constraints, we need to topologically sort and find a suitable location
     auto cycles = topological_sort_hooks_by_priority(hooks);
-
-    // find our new location (insert requires the next iterator)
-    auto newLoc = std::next(newIt);
-    hooks.erase(newIt);
 
     if (!cycles.empty()) {
       // We have cycles involving our new hook
@@ -325,38 +325,44 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
       }
 
       return ResultT::Err(installation::TargetBadPriorities{
-        hook_to_install, fmt::format("Cannot install hook due to cycles in priorities involving hook name: {}",
-                                     fmt::join(cycle_strings, ",") ) });
+        hook_to_install.metadata, fmt::format("Cannot install hook due to cycles in priorities involving hook name: {}",
+                                              fmt::join(cycle_strings, ",")) });
     }
 
     // now recompile all hooks to ensure orig pointers are correct
     recompile_hooks(hooks, target);
 
-    return ResultT::Ok(newLoc);
+    return ResultT::Ok(newIt);
   }
 
   // fast track If the incoming hook has no explicit constraints, insert at the front
   // so newer installs are called before earlier ones (preserve expected install semantics).
-  if (hook_to_install.priority.afters.empty() && hook_to_install.priority.befores.empty()) {
-    return ResultT::Ok(hooks.begin());
+  if (hook_to_install.metadata.priority.afters.empty() && hook_to_install.metadata.priority.befores.empty()) {
+    auto newIt = hooks.emplace(hooks.begin(), std::move(hook_to_install));
+    return ResultT::Ok(newIt);
   }
 
   // if no priority constraints affect us, we can install at the first suitable location that fits
   // Linear search for a suitable location: insert before the first existing hook that we should come after.
   for (auto it = hooks.begin(); it != hooks.end(); ++it) {
     bool can_install_before = true;
-    for (auto const& after_filter : hook_to_install.priority.afters) {
+    for (auto const& after_filter : hook_to_install.metadata.priority.afters) {
       if (after_filter.matches(it->metadata.name_info)) {
         can_install_before = false;
         break;
       }
     }
-    if (!can_install_before) continue;
-    return ResultT::Ok(it);
+    if (!can_install_before) {
+      continue;
+    }
+
+    auto new_it = hooks.emplace(it, std::move(hook_to_install));
+    return ResultT::Ok(new_it);
   }
 
   // If we could not find any suitable location, install at the start
-  return ResultT::Ok(hooks.begin());
+  auto new_it = hooks.emplace(hooks.begin(), std::move(hook_to_install));
+  return ResultT::Ok(new_it);
 }
 
 Result<std::monostate, installation::TargetMismatch> validate_install_metadata(TargetMetadata& existing,
@@ -459,14 +465,15 @@ installation::Result Install(HookInfo&& hook) {
     return installation::Result::ErrAt<installation::TargetMismatch>(installation_checks.error());
   }
 
-  auto location_or_err = find_suitable_priority_location_for(hooked_target->second.hooks, hook.metadata, target_info);
+  auto location_or_err = find_suitable_priority_location_for(hooked_target->second.hooks, std::move(hook));
   if (!location_or_err.has_value()) {
     return installation::Result::ErrAt<installation::TargetBadPriorities>(location_or_err.error());
   }
-  auto const location = location_or_err.value();
-  // 2. Assuming we found a reasonable location to install, insert our new hook before this location, and then adjust
-  // those around us to match.
-  auto const hook_data_result = hooked_target->second.hooks.emplace(location, std::move(hook));
+  auto const hook_data_result = location_or_err.value();
+
+  // TODO: Recompile fixups/origs for all hooks on this target or not?
+  // recompile_hooks(hooked_target->second.hooks, target_info);
+
   // - This is done by looking to the left and right of our target iterator to insert at:
   // -- If left does not exist: Rewrite the jump from the target to us; else rewrite the left's orig final jump to us
   if (hook_data_result == hooked_target->second.hooks.begin()) {
