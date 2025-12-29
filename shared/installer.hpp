@@ -28,7 +28,7 @@ constexpr static auto kNumFixupsPerInst = 4U;
 
 /// @brief Called on a target to reinstall all targets present at that location.
 /// A reinstall is done by re-performing orig fixups at the target, and rewriting a jump to the first hook.
-/// All other hooks remain unchanged.
+/// Then all hooks are topologically sorted by priority, and recompiled to ensure orig pointers are correct.
 /// This function returns Ok(true) if all hooks were reinstalled correctly, Ok(false) if there were no hooks to
 /// reinstall, and Error(...) otherwise.
 [[nodiscard]] FLAMINGO_EXPORT Result<bool, installation::Error> Reinstall(TargetDescriptor target);

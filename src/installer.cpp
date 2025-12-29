@@ -217,23 +217,27 @@ void recompile_hooks(std::list<HookInfo>& hooks, TargetDescriptor const& target_
     return;
   }
 
-// TODO: Do we need to copy Reinstall logic here?
+  // TODO: Do we need to copy Reinstall logic here?
 
-  // Ensure the target jumps to the first hook.
+  // Reinstall the orig by calling PerformFixupsAndCallback() again (as needed)
+  // Perform the write of the jump to the first hook
+  // Head
   auto it = hooks.begin();
+  target_entry->second.fixups.target.WriteJump(it->hook_ptr);
+
+  // Single hook: target -> hook, hook.orig -> fixups or no_fixups
   if (std::next(it) == hooks.end()) {
-    // Single hook: target -> hook, hook.orig -> fixups or no_fixups
-    target_entry->second.fixups.target.WriteJump(it->hook_ptr);
     it->assign_orig(target_entry->second.metadata.metadata.need_orig
                         ? target_entry->second.fixups.fixup_inst_destination.addr.data()
                         : reinterpret_cast<void*>(&no_fixups));
     return;
-  }
+  } 
+  
+  // When multiple hooks, orig is next hook
+  it->assign_orig(std::next(it)->hook_ptr);
+ 
 
   // Multiple hooks: head, middles, tail
-  // Head
-  target_entry->second.fixups.target.WriteJump(it->hook_ptr);
-  it->assign_orig(std::next(it)->hook_ptr);
 
   // Middles
   for (++it; std::next(it) != hooks.end(); ++it) {
@@ -512,12 +516,12 @@ Result<bool, installation::Error> Reinstall(TargetDescriptor target) {
   if (itr->second.metadata.metadata.need_orig) {
     itr->second.fixups.PerformFixupsAndCallback();
   }
-  // Perform the write of the jump to the first hook
-  itr->second.fixups.target.WriteJump(itr->second.hooks.begin()->hook_ptr);
-  // Note that we do NOT reconstruct all of the inner hook pointers between each hook.
-  // This is done as a partial optimization, but at some point we should revisit this (and adjust the docstring comment
-  // to match)
-  // TODO: Above
+  // topo sort hooks by priority
+  topological_sort_hooks_by_priority(itr->second.hooks);
+  // Recompile all hooks to ensure orig pointers are correct
+  recompile_hooks(itr->second.hooks, target);
+
+
   return RetType::Ok(true);
 }
 
