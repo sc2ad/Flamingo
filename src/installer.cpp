@@ -319,10 +319,14 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
     if (!cycles.empty()) {
       // We have cycles involving our new hook
       // Remove our new hook
-      hooks.erase(newIt);
+      std::vector<std::string> cycle_strings;
+      for (auto const& hook : cycles) {
+        cycle_strings.push_back(hook.metadata.name_info.name);
+      }
+
       return ResultT::Err(installation::TargetBadPriorities{
         hook_to_install, fmt::format("Cannot install hook due to cycles in priorities involving hook name: {}",
-                                     hooks.back().metadata.name_info) });
+                                     fmt::join(cycle_strings, ",") ) });
     }
 
     // now recompile all hooks to ensure orig pointers are correct
