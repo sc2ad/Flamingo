@@ -30,7 +30,7 @@ struct HookNameMetadata {
   /// @param other The other metadata to check against
   /// @return True if either the name or namespace matches
   [[nodiscard]] bool matches(HookNameMetadata const& other) const {
-    return (name == other.name) || (namespaze == other.namespaze);
+    return *this == other || (!name.empty() && name == other.name) || (!namespaze.empty() && namespaze == other.namespaze);
   }
 
   [[nodiscard]]
@@ -76,6 +76,6 @@ class fmt::formatter<flamingo::HookNameMetadata> {
   }
   template <typename Context>
   constexpr auto format(flamingo::HookNameMetadata const& metadata, Context& ctx) const {
-    return fmt::format_to(ctx.out(), "name: {}", metadata.name);
+    return fmt::format_to(ctx.out(), "name: {} namespaze {}", metadata.name, metadata.namespaze);
   }
 };
