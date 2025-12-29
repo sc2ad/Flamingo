@@ -633,6 +633,69 @@ static void test_preserve_no_priority_relative_order() {
   }
 }
 
+
+static void test_reinstall() {
+  puts("Test: reinstall");
+  uintptr_t h = 0xA0001001;
+  static uint8_t to_hook[]{ 0xf7, 0x0f, 0x1c, 0xf8 };
+  auto hook_target = perform_far_hook_test(h, to_hook);
+  void* orig = nullptr;
+
+  // Install a single hook
+  HookNameMetadata m;
+  m.name = "reinst";
+  auto r = flamingo::Install(flamingo::HookInfo((void*)h, hook_target.data(), &orig, std::move(m), HookPriority{}));
+  if (!r.has_value()) ERROR("Failed to install for reinstall test: {}", r.error());
+
+  // Reinstall should succeed and preserve orig pointer semantics
+  auto reins = flamingo::Reinstall(flamingo::TargetDescriptor(hook_target.data()));
+  if (!reins.has_value()) ERROR("Reinstall failed");
+  if (!reins.value()) ERROR("Reinstall reported no hooks reinstalled");
+
+  auto fixup_res = flamingo::FixupPointerFor(flamingo::TargetDescriptor(hook_target.data()));
+  if (!fixup_res.has_value()) ERROR("Failed to get fixup pointer after reinstall");
+  void* fixup_ptr = (void*)fixup_res.value().data();
+  if ((uintptr_t)orig != (uintptr_t)fixup_ptr) ERROR("Reinstall: expected orig == fixup after reinstall");
+}
+
+static void test_uninstall() {
+  puts("Test: uninstall");
+  uintptr_t h1 = 0xB0010001;
+  uintptr_t h2 = 0xB0020002;
+  static uint8_t to_hook[]{ 0xf7, 0x0f, 0x1c, 0xf8 };
+  auto hook_target = perform_far_hook_test(h1, to_hook);
+
+  void* orig1 = nullptr;
+  void* orig2 = nullptr;
+
+  auto r1 = flamingo::Install(flamingo::HookInfo((void*)h1, hook_target.data(), &orig1, HookNameMetadata{.name = "u1"}, HookPriority{}));
+  if (!r1.has_value()) ERROR("Failed to install u1: {}", r1.error());
+  auto handle1 = r1.value().returned_handle;
+
+  auto r2 = flamingo::Install(flamingo::HookInfo((void*)h2, hook_target.data(), &orig2, HookNameMetadata{.name = "u2"}, HookPriority{}));
+  if (!r2.has_value()) ERROR("Failed to install u2: {}", r2.error());
+  auto handle2 = r2.value().returned_handle;
+
+  // Uninstall one hook; should succeed and leave the other present
+  auto un1 = flamingo::Uninstall(handle2);
+  if (!un1.has_value()) ERROR("Uninstall returned error");
+
+  auto fixup_res = flamingo::FixupPointerFor(flamingo::TargetDescriptor(hook_target.data()));
+  if (!fixup_res.has_value()) ERROR("Failed to get fixup pointer after first uninstall");
+  void* fixup_ptr = (void*)fixup_res.value().data();
+
+  // The remaining hook's orig should point to fixup
+  if ((uintptr_t)orig1 != (uintptr_t)fixup_ptr) ERROR("Uninstall: expected remaining orig to point to fixup");
+
+  // Now uninstall the last hook and ensure the target is removed (no fixup)
+  auto un2 = flamingo::Uninstall(handle1);
+  if (!un2.has_value()) ERROR("Uninstall (last) returned error");
+  // After removing last, FixupPointerFor should fail
+  auto fix_final = flamingo::FixupPointerFor(flamingo::TargetDescriptor(hook_target.data()));
+  if (fix_final.has_value()) ERROR("Expected no fixup pointer after removing last hook");
+}
+
+
 int main() {
   test_name_matching();
   test_namespaze_matching();
@@ -644,5 +707,7 @@ int main() {
   test_befores_namespace_multiple();
   test_afters_namespace_multiple();
   test_preserve_no_priority_relative_order();
+  test_reinstall();
+  test_uninstall();
   puts("SORTED HOOKS TESTS PASSED");
 }
