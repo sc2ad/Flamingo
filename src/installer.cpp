@@ -209,8 +209,48 @@ void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
   }
 }
 
+/// @brief Recompiles the hooks for the given target, updating their orig pointers as needed.
+/// @param hooks The list of hooks installed on the target.
+/// @param target_info The target descriptor for the target.
+void recompile_hooks(std::list<HookInfo>& hooks, TargetDescriptor const& target_info) {
+  // Find the target entry. Note that this assumes the handle is not invalidated.
+  auto target_entry = targets.find(target_info);
+  if (target_entry == targets.end()) {
+    FLAMINGO_ABORT("Recompile hooks called on non-existent target!");
+    return;
+  }
+  if (hooks.empty()) return;
+
+  // Ensure the target jumps to the first hook.
+  auto it = hooks.begin();
+  if (std::next(it) == hooks.end()) {
+    // Single hook: target -> hook, hook.orig -> fixups or no_fixups
+    target_entry->second.fixups.target.WriteJump(it->hook_ptr);
+    it->assign_orig(target_entry->second.metadata.metadata.need_orig
+                       ? target_entry->second.fixups.fixup_inst_destination.addr.data()
+                       : reinterpret_cast<void*>(&no_fixups));
+    return;
+  }
+
+  // Multiple hooks: head, middles, tail
+  // Head
+  target_entry->second.fixups.target.WriteJump(it->hook_ptr);
+  it->assign_orig(std::next(it)->hook_ptr);
+
+  // Middles
+  for (++it; std::next(it) != hooks.end(); ++it) {
+    it->assign_orig(std::next(it)->hook_ptr);
+  }
+
+  // Tail
+  // 'it' now refers to the last element
+  it->assign_orig(target_entry->second.metadata.metadata.need_orig
+                     ? target_entry->second.fixups.fixup_inst_destination.addr.data()
+                     : reinterpret_cast<void*>(&no_fixups));
+}
+
 Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_suitable_priority_location_for(
-    std::list<HookInfo>& hooks, HookMetadata const& hook_to_install) {
+    std::list<HookInfo>& hooks, HookMetadata const& hook_to_install, TargetDescriptor const& target) {
   using ResultT = Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities>;
   // Install onto the target, respecting priorities.
   // Note that we may need to recompile some callbacks/fixups to change things
@@ -272,11 +312,13 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
     auto newIt = hooks.insert(hooks.end(), std::move(dumbHook));
     // if our hook has priority constraints, we need to topologically sort and find a suitable location
     topological_sort_hooks_by_priority(hooks);
-    // TODO: Recompile hooks after sort
 
     // find our new location (insert requires the next iterator)
     auto newLoc = std::next(newIt);
     hooks.erase(newIt);
+
+    // now recompile all hooks to ensure orig pointers are correct
+    recompile_hooks(hooks, target);
 
     return ResultT::Ok(newLoc);
   }
@@ -404,7 +446,7 @@ installation::Result Install(HookInfo&& hook) {
     return installation::Result::ErrAt<installation::TargetMismatch>(installation_checks.error());
   }
 
-  auto location_or_err = find_suitable_priority_location_for(hooked_target->second.hooks, hook.metadata);
+  auto location_or_err = find_suitable_priority_location_for(hooked_target->second.hooks, hook.metadata, target_info);
   if (!location_or_err.has_value()) {
     return installation::Result::ErrAt<installation::TargetBadPriorities>(location_or_err.error());
   }

@@ -129,14 +129,17 @@ static void test_namespaze_matching() {
   if (!fixup_res.has_value()) ERROR("Failed to get fixup pointer");
   void* fixup_ptr = (void*)fixup_res.value().data();
 
-  if ((uintptr_t)orig_prior != hf1) {
-    ERROR("Namespaze-matching: expected prior.orig == hf1 (0x{:x}) but got 0x{:x}", hf1, (uintptr_t)orig_prior);
+  // Newer installs are placed at the front, so when h1 then h2 were installed
+  // the preserved order is (two -> one). Thus after inserting `prior` before
+  // the `common` namespace, expected chain is: prior -> two -> one.
+  if ((uintptr_t)orig_prior != hf2) {
+    ERROR("Namespaze-matching: expected prior.orig == hf2 (0x{:x}) but got 0x{:x}", hf2, (uintptr_t)orig_prior);
   }
-  if ((uintptr_t)orig1 != hf2) {
-    ERROR("Namespaze-matching: expected hf1.orig == hf2 (0x{:x}) but got 0x{:x}", hf2, (uintptr_t)orig1);
+  if ((uintptr_t)orig2 != hf1) {
+    ERROR("Namespaze-matching: expected hf2.orig == hf1 (0x{:x}) but got 0x{:x}", hf1, (uintptr_t)orig2);
   }
-  if ((uintptr_t)orig2 != (uintptr_t)fixup_ptr) {
-    ERROR("Namespaze-matching: expected hf2.orig == fixup but got 0x{:x}", (uintptr_t)orig2);
+  if ((uintptr_t)orig1 != (uintptr_t)fixup_ptr) {
+    ERROR("Namespaze-matching: expected hf1.orig == fixup but got 0x{:x}", (uintptr_t)orig1);
   }
 }
 
@@ -208,10 +211,12 @@ static void test_complex_namespace() {
   if (!fixup_res.has_value()) ERROR("Failed to get fixup pointer");
   void* fixup_ptr = (void*)fixup_res.value().data();
 
-  // Expect b1 -> a1 -> a2
-  if ((uintptr_t)origB1 != a1) ERROR("Complex-ns: expected b1.orig == a1 (0x{:x}) got 0x{:x}", a1, (uintptr_t)origB1);
-  if ((uintptr_t)origA1 != a2) ERROR("Complex-ns: expected a1.orig == a2 (0x{:x}) got 0x{:x}", a2, (uintptr_t)origA1);
-  if ((uintptr_t)origA2 != (uintptr_t)fixup_ptr) ERROR("Complex-ns: expected a2.orig == fixup got 0x{:x}", (uintptr_t)origA2);
+  // Newer installs are at the front; after installing a1 then a2 the preserved
+  // order is a2 -> a1. Placing b1 before the 'alpha' namespace yields:
+  // Expect b1 -> a2 -> a1
+  if ((uintptr_t)origB1 != a2) ERROR("Complex-ns: expected b1.orig == a2 (0x{:x}) got 0x{:x}", a2, (uintptr_t)origB1);
+  if ((uintptr_t)origA2 != a1) ERROR("Complex-ns: expected a2.orig == a1 (0x{:x}) got 0x{:x}", a1, (uintptr_t)origA2);
+  if ((uintptr_t)origA1 != (uintptr_t)fixup_ptr) ERROR("Complex-ns: expected a1.orig == fixup got 0x{:x}", (uintptr_t)origA1);
 }
 
 static void test_final_conflict() {
