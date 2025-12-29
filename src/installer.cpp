@@ -162,7 +162,7 @@ void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
     }
     // move to sorted_hooks
     sorted_hooks.splice(sorted_hooks.end(), hooks, it->second);
-    
+
     // decrease in_degree of afters
     auto const& befores = graph[current_name];
     for (auto const& before : befores) {
@@ -243,23 +243,25 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
   // if existing hooks have priority constraints that depend on us, we need to respect those
   // therefore topological
 
-  // If the incoming hook has any priority constraints, we need a topological pass.
+  // If the incoming hook has any priority constraints, we may need a topological pass.
   bool requires_sort = !hook_to_install.priority.afters.empty() || !hook_to_install.priority.befores.empty();
+
+  // If any existing hook has constraints that reference the incoming hook, we must sort.
   for (auto const& existing_hook : hooks) {
-    // if existing_hook requests to be after us, we cannot install after it
     for (auto const& after_filter : existing_hook.metadata.priority.afters) {
       if (after_filter.matches(hook_to_install.name_info)) {
         requires_sort = true;
         break;
       }
-      // if existing_hook requests to be before us, we cannot install before it
-      for (auto const& before_filter : existing_hook.metadata.priority.befores) {
-        if (before_filter.matches(hook_to_install.name_info)) {
-          requires_sort = true;
-          break;
-        }
+    }
+    // if existing_hook requests to be before us, we cannot install before it
+    for (auto const& before_filter : existing_hook.metadata.priority.befores) {
+      if (before_filter.matches(hook_to_install.name_info)) {
+        requires_sort = true;
+        break;
       }
     }
+    if (requires_sort) break;
   }
 
   // if no priority constraints affect us, we can install at the first suitable location that fits
@@ -270,6 +272,7 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
     auto newIt = hooks.insert(hooks.end(), std::move(dumbHook));
     // if our hook has priority constraints, we need to topologically sort and find a suitable location
     topological_sort_hooks_by_priority(hooks);
+    // TODO: Recompile hooks after sort
 
     // find our new location (insert requires the next iterator)
     auto newLoc = std::next(newIt);
@@ -278,37 +281,27 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
     return ResultT::Ok(newLoc);
   }
 
-  // fast track If the incoming hook has no explicit constraints, append to the end to preserve relative install order.
+  // fast track If the incoming hook has no explicit constraints, insert at the front
+  // so newer installs are called before earlier ones (preserve expected install semantics).
   if (hook_to_install.priority.afters.empty() && hook_to_install.priority.befores.empty()) {
-    return ResultT::Ok(hooks.end());
+    return ResultT::Ok(hooks.begin());
   }
 
-  // linear search for first suitable location
-  // Preserve relative installation order for hooks in the same namespaze: place after last hook in that namespace
+  // Linear search for a suitable location: insert before the first existing hook that we should come after.
   for (auto it = hooks.begin(); it != hooks.end(); ++it) {
     bool can_install_before = true;
-    // if we want to be after any existing hook, we cannot install before it
     for (auto const& after_filter : hook_to_install.priority.afters) {
-      if (after_filter.matches(hook_to_install.name_info)) {
+      if (after_filter.matches(it->metadata.name_info)) {
         can_install_before = false;
         break;
       }
     }
-    if (!can_install_before) {
-      continue;
-    }
-
-    // TODO: if we want to be before any existing hook, we cannot install after it
-    // (this requires lookahead, so we skip for now)
-    // maybe we can assume this should never happen for now?
-
-    if (can_install_before) {
-      return ResultT::Ok(it);
-    }
+    if (!can_install_before) continue;
+    return ResultT::Ok(it);
   }
 
-  // If we could not find any suitable location, install at the end
-  return ResultT::Ok(hooks.end());
+  // If we could not find any suitable location, install at the start
+  return ResultT::Ok(hooks.begin());
 }
 
 Result<std::monostate, installation::TargetMismatch> validate_install_metadata(TargetMetadata& existing,
