@@ -267,12 +267,11 @@ FLAMINGO_C_EXPORT size_t flamingo_get_hook_count(uint32_t* target);
 /// beyond `capacity` elements.
 /// The `name` and `namespaze` fields inside each written `FlamingoHookInfo` are allocated with `malloc` and must
 /// be freed with `flamingo_free_strings` (pass an array of the `name` pointers or `namespaze` pointers respectively).
-FLAMINGO_C_EXPORT size_t flamingo_get_hooks(uint32_t* target, FlamingoHookInfo** hooks);
+FLAMINGO_C_EXPORT size_t flamingo_get_hooks(uint32_t* target, FlamingoHookInfo* hooks, size_t capacity);
 
-/// @brief Frees an array of `FlamingoHookInfo` strings allocated by `flamingo_get_hooks`.
-/// @param hooks The array of `FlamingoHookInfo` hooks to free.
-/// @param length The length of the `hooks` array.
-FLAMINGO_C_EXPORT_VOID void flamingo_free_hooks_array(FlamingoHookInfo* hooks, int length);
+/// @brief Frees the `name` and `namespaze` strings inside an array of `FlamingoHookInfo` returned
+/// by `flamingo_get_hooks`. Does NOT free the `hooks` array itself; the caller is responsible for that.
+FLAMINGO_C_EXPORT_VOID void flamingo_free_hooks_array(FlamingoHookInfo* hooks, size_t length);
 
 #ifdef __cplusplus
 }

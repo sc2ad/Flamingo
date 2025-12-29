@@ -257,39 +257,37 @@ FLAMINGO_C_EXPORT size_t flamingo_get_hook_count(uint32_t* target) {
   return res.value().hooks.size();
 }
 
-FLAMINGO_C_EXPORT size_t flamingo_get_hooks(uint32_t* target, FlamingoHookInfo** hooks) {
+FLAMINGO_C_EXPORT size_t flamingo_get_hooks(uint32_t* target, FlamingoHookInfo* hooks, size_t capacity) {
   auto res = flamingo::TargetDataFor(flamingo::TargetDescriptor{ .target = target });
   if (!res.has_value()) return 0;
   if (hooks == nullptr) return 0;
 
-  auto const& list = res.value().hooks;
+  auto const& hook_list = res.value().hooks;
+  size_t to_copy = std::min(capacity, hook_list.size());
 
-  *hooks = reinterpret_cast<FlamingoHookInfo*>(std::malloc(sizeof(FlamingoHookInfo) * list.size()));
-
-  size_t index = 0;
-  for (auto const& hook_info : list) {
-    auto& out_info = (*hooks)[index];
-    out_info.hook_ptr = hook_info.hook_ptr;
-    out_info.orig_ptr = hook_info.orig_ptr;
-
-    auto const& name_info = hook_info.metadata.name_info;
-
-    if (!name_info.name.empty()) {
-      out_info.name = reinterpret_cast<char*>(std::malloc(name_info.name.size() + 1));
-      std::strcpy(out_info.name, name_info.name.c_str());
+  auto it = hook_list.begin();
+  for (size_t i = 0; i < to_copy; i++) {
+    auto& dest = hooks[i];
+    dest.hook_ptr = it->hook_ptr;
+    dest.orig_ptr = it->orig_ptr;
+    // Copy name
+    if (it->metadata.name_info.name.empty()) {
+      dest.name = nullptr;
     } else {
-      out_info.name = nullptr;
+      dest.name = static_cast<char*>(std::malloc(it->metadata.name_info.name.size() + 1));
+      std::strcpy(dest.name, it->metadata.name_info.name.c_str());
     }
-    if (!name_info.namespaze.empty()) {
-      out_info.namespaze = reinterpret_cast<char*>(std::malloc(name_info.namespaze.size() + 1));
-      std::strcpy(out_info.namespaze, name_info.namespaze.c_str());
+    // Copy namespaze
+    if (it->metadata.name_info.namespaze.empty()) {
+      dest.namespaze = nullptr;
     } else {
-      out_info.namespaze = nullptr;
+      dest.namespaze = static_cast<char*>(std::malloc(it->metadata.name_info.namespaze.size() + 1));
+      std::strcpy(dest.namespaze, it->metadata.name_info.namespaze.c_str());
     }
-    index++;
+    ++it;
   }
 
-  return list.size();
+  return to_copy;
 }
 
 FLAMINGO_C_EXPORT_VOID void flamingo_free_hooks_array(FlamingoHookInfo* hooks, size_t length) {
@@ -305,6 +303,4 @@ FLAMINGO_C_EXPORT_VOID void flamingo_free_hooks_array(FlamingoHookInfo* hooks, s
       std::free(hook_info.namespaze);
     }
   }
-
-  free(hooks);
 }
