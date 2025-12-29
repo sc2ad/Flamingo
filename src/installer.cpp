@@ -39,10 +39,10 @@ struct HookNameMetadataHash {
 
 /// @brief Topologically sorts the provided hooks by their priority constraints.
 /// @param hooks The list of hooks to sort in place.
-/// @return An iterator to the place where the new hook can be installed respecting priorities.
-void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
+/// @return The sorted list of hooks that have cycles.
+std::list<HookInfo> topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
   if (hooks.empty()) {
-    return;
+    return {};
   }
 
   // Ensure any "final" priority hooks are placed at the end while preserving relative order.
@@ -185,10 +185,7 @@ void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
   // now, any remaining hooks in `hooks` are part of cycles
   // append them in their original order and log a warning. Splicing invalidates
   // iterators, so consume from the front until empty to preserve original order.
-  while (!hooks.empty()) {
-    auto it = hooks.begin();
-    auto const& hook = *it;
-    sorted_hooks.splice(sorted_hooks.end(), hooks, it);
+  for (auto const& hook : hooks) {
     FLAMINGO_CRITICAL(
         "Detected cycle in hook priorities involving hook name: {}. Hooks involved in the cycle will remain in their "
         "original order.",
@@ -199,6 +196,7 @@ void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
 
   // replace original list with the sorted result using swap to avoid reallocation
   hooks.swap(sorted_hooks);
+
   {
     std::vector<std::string_view> hook_names;
     hook_names.reserve(hooks.size());
@@ -207,6 +205,9 @@ void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
     }
     FLAMINGO_DEBUG("Final hook order after topological sort: {}", fmt::join(hook_names, " -> "));
   }
+
+  // remaining hooks are cycles
+  return sorted_hooks;
 }
 
 /// @brief Recompiles the hooks for the given target, updating their orig pointers as needed.
@@ -219,7 +220,6 @@ void recompile_hooks(std::list<HookInfo>& hooks, TargetDescriptor const& target_
     FLAMINGO_ABORT("Recompile hooks called on non-existent target!");
     return;
   }
-  if (hooks.empty()) return;
 
   // Ensure the target jumps to the first hook.
   auto it = hooks.begin();
@@ -227,8 +227,8 @@ void recompile_hooks(std::list<HookInfo>& hooks, TargetDescriptor const& target_
     // Single hook: target -> hook, hook.orig -> fixups or no_fixups
     target_entry->second.fixups.target.WriteJump(it->hook_ptr);
     it->assign_orig(target_entry->second.metadata.metadata.need_orig
-                       ? target_entry->second.fixups.fixup_inst_destination.addr.data()
-                       : reinterpret_cast<void*>(&no_fixups));
+                        ? target_entry->second.fixups.fixup_inst_destination.addr.data()
+                        : reinterpret_cast<void*>(&no_fixups));
     return;
   }
 
@@ -245,8 +245,8 @@ void recompile_hooks(std::list<HookInfo>& hooks, TargetDescriptor const& target_
   // Tail
   // 'it' now refers to the last element
   it->assign_orig(target_entry->second.metadata.metadata.need_orig
-                     ? target_entry->second.fixups.fixup_inst_destination.addr.data()
-                     : reinterpret_cast<void*>(&no_fixups));
+                      ? target_entry->second.fixups.fixup_inst_destination.addr.data()
+                      : reinterpret_cast<void*>(&no_fixups));
 }
 
 Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_suitable_priority_location_for(
@@ -259,7 +259,6 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
   // do this)
   // - First, walk all the hooks for a viable location, if we can find one. If we cannot, then we have to recompile
   // hooks.
-  // TODO: Above
 
   // Figure out 3 possible scenarios
   // if incoming is final, we must be at the end (unless the end is also final, then error)
@@ -304,18 +303,27 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
     if (requires_sort) break;
   }
 
-  // if no priority constraints affect us, we can install at the first suitable location that fits
+  // if we require a sort, do it then recompile
   if (requires_sort) {
     // Insert the new hook first so we can let topo sort place it correctly
     HookInfo dumbHook(nullptr, nullptr, nullptr);
     dumbHook.metadata = hook_to_install;
     auto newIt = hooks.insert(hooks.end(), std::move(dumbHook));
     // if our hook has priority constraints, we need to topologically sort and find a suitable location
-    topological_sort_hooks_by_priority(hooks);
+    auto cycles = topological_sort_hooks_by_priority(hooks);
 
     // find our new location (insert requires the next iterator)
     auto newLoc = std::next(newIt);
     hooks.erase(newIt);
+
+    if (!cycles.empty()) {
+      // We have cycles involving our new hook
+      // Remove our new hook
+      hooks.erase(newIt);
+      return ResultT::Err(installation::TargetBadPriorities{
+        hook_to_install, fmt::format("Cannot install hook due to cycles in priorities involving hook name: {}",
+                                     hooks.back().metadata.name_info) });
+    }
 
     // now recompile all hooks to ensure orig pointers are correct
     recompile_hooks(hooks, target);
@@ -329,6 +337,7 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
     return ResultT::Ok(hooks.begin());
   }
 
+  // if no priority constraints affect us, we can install at the first suitable location that fits
   // Linear search for a suitable location: insert before the first existing hook that we should come after.
   for (auto it = hooks.begin(); it != hooks.end(); ++it) {
     bool can_install_before = true;
