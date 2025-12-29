@@ -338,6 +338,130 @@ static void test_five_hook_order() {
   }
 }
 
+// Forward declarations for additional edge-case tests
+
+static void test_no_constraints_multiple() {
+  puts("Test: no-constraints multiple installs");
+  uintptr_t h1 = 0x60010001;
+  uintptr_t h2 = 0x60020002;
+  uintptr_t h3 = 0x60030003;
+  static uint8_t to_hook[]{ 0xf7, 0x0f, 0x1c, 0xf8 };
+
+  auto hook_target = perform_far_hook_test(h1, to_hook);
+  void* orig1 = nullptr; void* orig2 = nullptr; void* orig3 = nullptr;
+
+  HookNameMetadata m1; m1.name = "h1";
+  HookNameMetadata m2; m2.name = "h2";
+  HookNameMetadata m3; m3.name = "h3";
+
+  if (!flamingo::Install(flamingo::HookInfo((void*)h1, hook_target.data(), &orig1, std::move(m1), HookPriority{})).has_value())
+    ERROR("Failed to install h1");
+  if (!flamingo::Install(flamingo::HookInfo((void*)h2, hook_target.data(), &orig2, std::move(m2), HookPriority{})).has_value())
+    ERROR("Failed to install h2");
+  if (!flamingo::Install(flamingo::HookInfo((void*)h3, hook_target.data(), &orig3, std::move(m3), HookPriority{})).has_value())
+    ERROR("Failed to install h3");
+
+  auto fixup_res = flamingo::FixupPointerFor(flamingo::TargetDescriptor(hook_target.data()));
+  if (!fixup_res.has_value()) ERROR("Failed to get fixup pointer");
+  void* fixup_ptr = (void*)fixup_res.value().data();
+
+  std::vector<uintptr_t> hooks = {h1,h2,h3};
+  std::unordered_map<uintptr_t, uintptr_t> orig_map;
+  orig_map[h1] = (uintptr_t)orig1;
+  orig_map[h2] = (uintptr_t)orig2;
+  orig_map[h3] = (uintptr_t)orig3;
+
+  std::unordered_set<uintptr_t> pointed;
+  for (auto const& kv : orig_map) {
+    if (std::find(hooks.begin(), hooks.end(), kv.second) != hooks.end()) pointed.insert(kv.second);
+  }
+  uintptr_t head = 0;
+  for (auto h : hooks) if (pointed.find(h) == pointed.end()) { head = h; break; }
+  if (head == 0) ERROR("No-constraints: could not determine head");
+
+  std::vector<uintptr_t> order; uintptr_t cur = head;
+  while (true) {
+    order.push_back(cur);
+    auto it = orig_map.find(cur);
+    if (it == orig_map.end()) break;
+    uintptr_t next = it->second;
+    if (next == (uintptr_t)fixup_ptr) break;
+    cur = next;
+    if (order.size() > hooks.size()) break;
+  }
+
+  std::vector<uintptr_t> expected = {h3,h2,h1};
+  if (order != expected) ERROR("No-constraints: expected {} but got {}",
+                              fmt::format("0x{:x},0x{:x},0x{:x}", expected[0],expected[1],expected[2]),
+                              fmt::format("0x{:x}", order.empty() ? 0 : order[0]));
+}
+
+static void test_befores_namespace_multiple() {
+  puts("Test: befores matching multiple in namespace");
+  uintptr_t a1 = 0x70010001;
+  uintptr_t a2 = 0x70020002;
+  uintptr_t prior = 0x70030003;
+  static uint8_t to_hook[]{ 0xf7, 0x0f, 0x1c, 0xf8 };
+
+  auto hook_target = perform_far_hook_test(a1, to_hook);
+  void* origA1 = nullptr; void* origA2 = nullptr; void* origPrior = nullptr;
+
+  HookNameMetadata ma1; ma1.name = "one"; ma1.namespaze = "grp";
+  HookNameMetadata ma2; ma2.name = "two"; ma2.namespaze = "grp";
+
+  if (!flamingo::Install(flamingo::HookInfo((void*)a1, hook_target.data(), &origA1, std::move(ma1), HookPriority{})).has_value())
+    ERROR("Failed to install a1");
+  if (!flamingo::Install(flamingo::HookInfo((void*)a2, hook_target.data(), &origA2, std::move(ma2), HookPriority{})).has_value())
+    ERROR("Failed to install a2");
+
+  HookNameMetadata prior_name; prior_name.name = "prior";
+  HookPriority prior_p; HookNameMetadata match_ns; match_ns.namespaze = "grp"; prior_p.befores.push_back(match_ns);
+  if (!flamingo::Install(flamingo::HookInfo((void*)prior, hook_target.data(), &origPrior, std::move(prior_name), std::move(prior_p))).has_value())
+    ERROR("Failed to install prior");
+
+  auto fixup_res = flamingo::FixupPointerFor(flamingo::TargetDescriptor(hook_target.data()));
+  if (!fixup_res.has_value()) ERROR("Failed to get fixup pointer");
+  void* fixup_ptr = (void*)fixup_res.value().data();
+
+  // Expect prior -> a2 -> a1 (newer installs at front)
+  if ((uintptr_t)origPrior != a2) ERROR("Befores-multi: expected prior.orig == a2 (0x{:x}) got 0x{:x}", a2, (uintptr_t)origPrior);
+  if ((uintptr_t)origA2 != a1) ERROR("Befores-multi: expected a2.orig == a1 (0x{:x}) got 0x{:x}", a1, (uintptr_t)origA2);
+  if ((uintptr_t)origA1 != (uintptr_t)fixup_ptr) ERROR("Befores-multi: expected a1.orig == fixup got 0x{:x}", (uintptr_t)origA1);
+}
+
+static void test_afters_namespace_multiple() {
+  puts("Test: afters matching multiple in namespace");
+  uintptr_t g1 = 0x80010001;
+  uintptr_t g2 = 0x80020002;
+  uintptr_t late = 0x80030003;
+  static uint8_t to_hook[]{ 0xf7, 0x0f, 0x1c, 0xf8 };
+
+  auto hook_target = perform_far_hook_test(g1, to_hook);
+  void* origG1 = nullptr; void* origG2 = nullptr; void* origLate = nullptr;
+
+  HookNameMetadata mg1; mg1.name = "g1"; mg1.namespaze = "grp";
+  HookNameMetadata mg2; mg2.name = "g2"; mg2.namespaze = "grp";
+
+  if (!flamingo::Install(flamingo::HookInfo((void*)g1, hook_target.data(), &origG1, std::move(mg1), HookPriority{})).has_value())
+    ERROR("Failed to install g1");
+  if (!flamingo::Install(flamingo::HookInfo((void*)g2, hook_target.data(), &origG2, std::move(mg2), HookPriority{})).has_value())
+    ERROR("Failed to install g2");
+
+  HookNameMetadata late_name; late_name.name = "late";
+  HookPriority late_p; HookNameMetadata match_ns2; match_ns2.namespaze = "grp"; late_p.afters.push_back(match_ns2);
+  if (!flamingo::Install(flamingo::HookInfo((void*)late, hook_target.data(), &origLate, std::move(late_name), std::move(late_p))).has_value())
+    ERROR("Failed to install late");
+
+  auto fixup_res = flamingo::FixupPointerFor(flamingo::TargetDescriptor(hook_target.data()));
+  if (!fixup_res.has_value()) ERROR("Failed to get fixup pointer");
+  void* fixup_ptr = (void*)fixup_res.value().data();
+
+  // Expect g2 -> g1 -> late
+  if ((uintptr_t)origG2 != g1) ERROR("Afters-multi: expected g2.orig == g1 (0x{:x}) got 0x{:x}", g1, (uintptr_t)origG2);
+  if ((uintptr_t)origG1 != late) ERROR("Afters-multi: expected g1.orig == late (0x{:x}) got 0x{:x}", late, (uintptr_t)origG1);
+  if ((uintptr_t)origLate != (uintptr_t)fixup_ptr) ERROR("Afters-multi: expected late.orig == fixup got 0x{:x}", (uintptr_t)origLate);
+}
+
 int main() {
   test_name_matching();
   test_namespaze_matching();
@@ -345,5 +469,8 @@ int main() {
   test_complex_namespace();
   test_final_conflict();
   test_five_hook_order();
+  test_no_constraints_multiple();
+  test_befores_namespace_multiple();
+  test_afters_namespace_multiple();
   puts("SORTED HOOKS TESTS PASSED");
 }
