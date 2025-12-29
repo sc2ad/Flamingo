@@ -632,7 +632,7 @@ void Fixups::PerformFixupsAndCallback() {
   }
 
   // Free the disassembled instructions from before the fixups
-  cs_free(insns, target.addr.size());
+  if (insns != nullptr) cs_free(insns, count);
   // Now, write the callback after all of our fixups.
   context.WriteCallback(&target.addr[target.addr.size()]);
   // After we have written ALL of our fixups initially AND our callback, perform our second pass where we inject
