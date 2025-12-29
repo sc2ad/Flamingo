@@ -7,6 +7,7 @@
 #include <queue>
 #include <span>
 #include <unordered_map>
+#include <utility>
 #include <variant>
 
 #include <fmt/ranges.h>
@@ -37,10 +38,13 @@ struct HookNameMetadataHash {
 };
 
 /// @brief Topologically sorts the provided hooks by their priority constraints.
+/// @param hooks The list of hooks to sort in place.
+/// @return An iterator to the place where the new hook can be installed respecting priorities.
 void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
   if (hooks.empty()) {
     return;
   }
+
   // Ensure any "final" priority hooks are placed at the end while preserving relative order.
   std::vector<std::list<HookInfo>::iterator> finals;
   finals.reserve(std::distance(hooks.begin(), hooks.end()));
@@ -236,7 +240,8 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
   // if existing hooks have priority constraints that depend on us, we need to respect those
   // therefore topological
 
-  bool requires_sort = false;
+  // If the incoming hook has any priority constraints, we need a topological pass.
+  bool requires_sort = !hook_to_install.priority.afters.empty() || !hook_to_install.priority.befores.empty();
   for (auto const& existing_hook : hooks) {
     // if existing_hook requests to be after us, we cannot install after it
     for (auto const& after_filter : existing_hook.metadata.priority.afters) {
@@ -256,14 +261,27 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
 
   // if no priority constraints affect us, we can install at the first suitable location that fits
   if (requires_sort) {
+    // Insert the new hook first so we can let topo sort place it correctly
+    HookInfo dumbHook(nullptr, nullptr, nullptr);
+    dumbHook.metadata = hook_to_install;
+    auto newIt = hooks.insert(hooks.end(), std::move(dumbHook));
     // if our hook has priority constraints, we need to topologically sort and find a suitable location
     topological_sort_hooks_by_priority(hooks);
 
-    // Otherwise, install at the end to preserve the relative order of previously-installed hooks
-    FLAMINGO_ABORT("Priority-based installation requiring reordering is not yet implemented");
+    // find our new location (insert requires the next iterator)
+    auto newLoc = std::next(newIt);
+    hooks.erase(newIt);
+
+    return ResultT::Ok(newLoc);
+  }
+
+  // fast track If the incoming hook has no explicit constraints, append to the end to preserve relative install order.
+  if (hook_to_install.priority.afters.empty() && hook_to_install.priority.befores.empty()) {
+    return ResultT::Ok(hooks.end());
   }
 
   // linear search for first suitable location
+  // Preserve relative installation order for hooks in the same namespaze: place after last hook in that namespace
   for (auto it = hooks.begin(); it != hooks.end(); ++it) {
     bool can_install_before = true;
     // if we want to be after any existing hook, we cannot install before it
