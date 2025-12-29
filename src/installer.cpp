@@ -90,8 +90,12 @@ void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
     for (auto const& hook : hooks) {
       auto const& name = hook.metadata.name_info;
       // exclude self
-      if (name == self) continue;
-      if (name.matches(filter)) matches.push_back(name);
+      if (name == self) {
+        continue;
+      }
+      if (name.matches(filter)) {
+        matches.push_back(name);
+      }
     }
     return matches;
   };
@@ -126,18 +130,15 @@ void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
   // https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm
   std::list<HookInfo> sorted_hooks;
   std::unordered_map<HookNameMetadata, int, HookNameMetadataHash> in_degree;
-  for (auto const& [name, afters] : graph) {
-    // ensure in_degree entry exists with at least 0
-    in_degree.try_emplace(name, 0);
-
-    for (auto const& after : afters) {
-      in_degree[after]++;
-    }
+  for (auto const& hook : hooks) {
+    in_degree[hook.metadata.name_info] = 0;
   }
 
-  // Ensure every hook is represented in in_degree (isolated nodes should have degree 0)
-  for (auto const& [name, itr] : name_to_iterator) {
-    in_degree.try_emplace(name, 0);
+  // compute in-degrees
+  for (auto const& [name, befores] : graph) {
+    for (auto const& before : befores) {
+      in_degree[before]++;
+    }
   }
 
   // find all nodes with in_degree 0, preserving the original hooks list order
@@ -155,17 +156,19 @@ void topological_sort_hooks_by_priority(std::list<HookInfo>& hooks) {
 
     // find the iterator for this name
     auto it = name_to_iterator.find(current_name);
-    if (it != name_to_iterator.end()) {
-      // move to sorted_hooks
-      sorted_hooks.splice(sorted_hooks.end(), hooks, it->second);
+    if (it == name_to_iterator.end()) {
+      // should not happen
+      continue;
     }
-
+    // move to sorted_hooks
+    sorted_hooks.splice(sorted_hooks.end(), hooks, it->second);
+    
     // decrease in_degree of afters
-    auto const& afters = graph[current_name];
-    for (auto const& after : afters) {
-      in_degree[after]--;
-      if (in_degree[after] == 0) {
-        zero_in_degree.push(after);
+    auto const& befores = graph[current_name];
+    for (auto const& before : befores) {
+      in_degree[before]--;
+      if (in_degree[before] == 0) {
+        zero_in_degree.push(before);
       }
     }
   }
