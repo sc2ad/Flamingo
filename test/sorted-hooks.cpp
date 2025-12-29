@@ -164,20 +164,25 @@ static void test_priority_cycle() {
   auto rX = flamingo::Install(std::move(hX));
   if (!rX.has_value()) ERROR("Failed to install X: {}", rX.error());
 
+  // installing this should trigger a cycle and return an error; the original
+  // state from after installing X should be retained.
   flamingo::HookInfo hY((void*)hy, hook_target.data(), &origY, std::move(nY), std::move(pY));
   auto rY = flamingo::Install(std::move(hY));
-  if (!rY.has_value()) ERROR("Failed to install Y: {}", rY.error());
+  if (rY.has_value()) ERROR("Expected Y install to fail due to cycle, but it succeeded");
 
   auto fixup_res = flamingo::FixupPointerFor(flamingo::TargetDescriptor(hook_target.data()));
   if (!fixup_res.has_value()) ERROR("Failed to get fixup pointer");
   void* fixup_ptr = (void*)fixup_res.value().data();
 
-  // Cycle should preserve original install order: X then Y
-  if ((uintptr_t)origX != hy) {
-    ERROR("Priority-cycle: expected X.orig == Y.hook_ptr (0x{:x}) but got 0x{:x}", hy, (uintptr_t)origX);
+  // Since Y failed to install, the original state from after installing X
+  // must be preserved: X.orig should still point to the fixup pointer, and
+  // Y should not have been installed (origY stays null).
+  if ((uintptr_t)origX != (uintptr_t)fixup_ptr) {
+    ERROR("Priority-cycle: expected X.orig to remain pointing at fixups (0x{:x}) but got 0x{:x}",
+          (uintptr_t)fixup_ptr, (uintptr_t)origX);
   }
-  if ((uintptr_t)origY != (uintptr_t)fixup_ptr) {
-    ERROR("Priority-cycle: expected Y.orig == fixups but got 0x{:x}", (uintptr_t)origY);
+  if (origY != nullptr) {
+    ERROR("Priority-cycle: expected Y not to be installed (origY == nullptr) but got 0x{:x}", (uintptr_t)origY);
   }
 }
 
