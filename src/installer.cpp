@@ -217,6 +217,8 @@ void recompile_hooks(std::list<HookInfo>& hooks, TargetDescriptor const& target_
     return;
   }
 
+// TODO: Do we need to copy Reinstall logic here?
+
   // Ensure the target jumps to the first hook.
   auto it = hooks.begin();
   if (std::next(it) == hooks.end()) {
