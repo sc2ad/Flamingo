@@ -320,6 +320,7 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
     auto old_hooks = hooks;
 
     TargetDescriptor target{ hook_to_install.target };
+    auto metadata = hook_to_install.metadata;
     // Insert the new hook first so we can let topo sort place it correctly
     auto newIt = hooks.insert(hooks.begin(), std::move(hook_to_install));
     // if our hook has priority constraints, we need to topologically sort and find a suitable location
@@ -337,7 +338,7 @@ Result<std::list<HookInfo>::iterator, installation::TargetBadPriorities> find_su
       hooks.swap(old_hooks);
 
       return ResultT::Err(installation::TargetBadPriorities{
-        hook_to_install.metadata, fmt::format("Cannot install hook due to cycles in priorities involving hook name: {}",
+        metadata, fmt::format("Cannot install hook due to cycles in priorities involving hook name: {}",
                                               fmt::join(cycle_strings, ",")) });
     }
 
