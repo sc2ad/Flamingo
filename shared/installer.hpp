@@ -13,6 +13,11 @@ namespace flamingo {
 constexpr static auto kHookAlignment = 16U;
 constexpr static auto kNumFixupsPerInst = 4U;
 
+/// @brief Returns the target data flamingo has for a specified target.
+/// @param target The target descriptor to query.
+/// @return The target data if it exists.
+[[nodiscard]] FLAMINGO_EXPORT std::optional<TargetData const> TargetDataFor(TargetDescriptor target);
+
 /// @brief To install a hook, we require a constructed HookInfo. We want to hold exclusive ownership, so we require an
 /// rvalue (we may also forward params?). Because a HookInfo is just data, we go find our TargetInfo that matches our
 /// target. Then, we attempt to install that HookInfo onto the TargetData, mutating the TargetData (but not invalidating

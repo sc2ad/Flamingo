@@ -24,15 +24,31 @@ struct InstallationMetadata {
 /// Lookups are described using userdata when the HookInfo is made at first.
 struct HookNameMetadata {
   std::string name{};
+  std::string namespaze{};
+
+  /// @brief Checks if this name metadata matches another (either by name or namespace)
+  /// @param other The other metadata to check against
+  /// @return True if either the name or namespace matches
+  [[nodiscard]] bool matches(HookNameMetadata const& other) const {
+    return *this == other || (!name.empty() && name == other.name) || (!namespaze.empty() && namespaze == other.namespaze);
+  }
+
+  [[nodiscard]]
+  bool operator==(HookNameMetadata const& other) const {
+    return (name == other.name) && (namespaze == other.namespaze);
+  }
 };
+
+/// Specifies the filter type for hook names in priorities
+using HookNameFilter = HookNameMetadata;
 
 /// @brief Represents a priority for how to align hook orderings. Note that a change in priority MAY require a full list
 /// recreation. But SHOULD NOT require a hook recompile or a trampoline recompile.
 struct HookPriority {
   /// @brief The set of constraints for this hook to be installed before (called earlier than)
-  std::vector<HookNameMetadata> befores{};
+  std::vector<HookNameFilter> befores{};
   /// @brief The set of constraints for this hook to be installed after (called later than)
-  std::vector<HookNameMetadata> afters{};
+  std::vector<HookNameFilter> afters{};
   /// @brief Set to true if this hook should be the final hook (closest to the original function)
   bool is_final{false};
 };
@@ -60,6 +76,6 @@ class fmt::formatter<flamingo::HookNameMetadata> {
   }
   template <typename Context>
   constexpr auto format(flamingo::HookNameMetadata const& metadata, Context& ctx) const {
-    return fmt::format_to(ctx.out(), "name: {}", metadata.name);
+    return fmt::format_to(ctx.out(), "name: {} namespaze {}", metadata.name, metadata.namespaze);
   }
 };

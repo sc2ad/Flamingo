@@ -540,6 +540,10 @@ void ShimTarget::WriteJump(void* address) {
   // The writer for ensuring correct permissions and also performing the write
   ProtectionWriter<uint32_t> writer(*this);
   WriteCallback(writer, reinterpret_cast<uint32_t*>(address));
+
+  // flush instruction cache
+  __builtin___clear_cache(reinterpret_cast<char*>(addr.data()),
+                             reinterpret_cast<char*>(addr.data() + addr.size()));
 }
 
 void ShimTarget::WriteCallback(ProtectionWriter<uint32_t>& writer, uint32_t const* target) {
@@ -628,7 +632,7 @@ void Fixups::PerformFixupsAndCallback() {
   }
 
   // Free the disassembled instructions from before the fixups
-  cs_free(insns, target.addr.size());
+  if (insns != nullptr) cs_free(insns, count);
   // Now, write the callback after all of our fixups.
   context.WriteCallback(&target.addr[target.addr.size()]);
   // After we have written ALL of our fixups initially AND our callback, perform our second pass where we inject
