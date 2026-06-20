@@ -3,6 +3,9 @@
 #include <cstdint>
 #include <span>
 #include <variant>
+#include <vector>
+#include <optional>
+#include <string>
 #include "hook-data.hpp"
 #include "hook-installation-result.hpp"
 #include "target-data.hpp"
@@ -12,6 +15,11 @@ namespace flamingo {
 
 constexpr static auto kHookAlignment = 16U;
 constexpr static auto kNumFixupsPerInst = 4U;
+
+/// @brief Returns the target data flamingo has for a specified target.
+/// @param target The target descriptor to query.
+/// @return The target data if it exists.
+[[nodiscard]] FLAMINGO_EXPORT std::optional<TargetData const> TargetDataFor(TargetDescriptor target);
 
 /// @brief To install a hook, we require a constructed HookInfo. We want to hold exclusive ownership, so we require an
 /// rvalue (we may also forward params?). Because a HookInfo is just data, we go find our TargetInfo that matches our
@@ -57,5 +65,12 @@ std::span<uint32_t> FLAMINGO_EXPORT OriginalInstsFor(TargetDescriptor target);
 /// If the target is not hooked, returns an error Result.
 [[nodiscard]] FLAMINGO_EXPORT Result<std::span<uint32_t const>, std::monostate> FixupPointerFor(
     TargetDescriptor target);
+
+/// @brief Returns a list of installed hooks.
+/// @param filter Optional name filter; if provided only hooks matching the filter are returned.
+/// @param target Optional target filter; if provided only hooks installed on that target are returned.
+[[nodiscard]] FLAMINGO_EXPORT std::vector<HookInfo> Hooks(
+    std::optional<HookNameFilter> const& filter = std::nullopt,
+    std::optional<TargetDescriptor> const& target = std::nullopt);
 
 }  // namespace flamingo

@@ -9,7 +9,11 @@
             "windows": {
                 "command": "ndk-build.cmd"
             },
-            "args": ["NDK_PROJECT_PATH=.", "APP_BUILD_SCRIPT=./Android.mk", "NDK_APPLICATION_MK=./Application.mk"],
+            "args": [
+                "NDK_PROJECT_PATH=.",
+                "APP_BUILD_SCRIPT=./Android.mk",
+                "NDK_APPLICATION_MK=./Application.mk"
+            ],
             "group": "build",
             "options": {
                 "env": {}
@@ -43,6 +47,16 @@
             "options": {
                 "env": {}
             }
+        },
+        {
+            "label": "Build test",
+            "detail": "Builds the test executable",
+            "type": "shell",
+            "command": "cmake -B build_test -DTEST_BUILD=1 -DCMAKE_BUILD_TYPE=Debug -GNinja && cmake --build build_test",
+            "group": "build",
+            "options": {
+                "env": {}
+            },
         }
     ]
 }

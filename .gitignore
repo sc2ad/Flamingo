@@ -58,6 +58,7 @@ extern/
 extern.cmake
 qpm_defines.cmake
 build/
+build_test
 
 build-linux/
 *.inc

@@ -6,8 +6,8 @@
   "info": {
     "name": "flamingo",
     "id": "flamingo",
-    "version": "1.0.0",
-    "url": "https://github.com/sc2ad/Flamingo",
+    "version": "1.2.1",
+    "url": "https://github.com/Fernthedev/Flamingo",
     "additionalData": {
       "overrideSoName": "libflamingo.so"
     }
@@ -21,6 +21,7 @@
         "pwsh ./build-android-test.ps1"
       ]
     },
+    "ndk": "^29.0.14206865",
     "qmodIncludeDirs": [
       "./build"
     ],

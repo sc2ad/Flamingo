@@ -42,17 +42,10 @@ jobs:
       - name: QPM Collapse
         run: qpm collapse
 
-      - name: CMake with LOCAL_TEST enabled
+      - name: Run test script
         run: |
-          CC=clang CXX=clang cmake -B build -DTEST_BUILD=1 -GNinja
-
-      - name: Build
-        run: |
-          ninja -C build
- 
-      # Run the test to ensure validity
-      - name: Run tests
-        run: ctest --test-dir build --output-on-failure
+          cd ${GITHUB_WORKSPACE}
+          ./test.sh
 
   build:
     runs-on: ubuntu-latest

@@ -35,6 +35,10 @@ struct ProtectionWriter {
   }
 
   ~ProtectionWriter() {
+    // flush instruction cache on finish
+    auto addr = target.addr;
+    __builtin___clear_cache(reinterpret_cast<char*>(addr.data()), reinterpret_cast<char*>(addr.data() + addr.size()));
+
     target.protection = original_permissions;
     target.Protect();
   }

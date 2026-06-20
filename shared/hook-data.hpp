@@ -129,4 +129,10 @@ struct HookInfo {
   HookMetadata metadata;
 };
 
+inline auto format_as(HookInfo const& hook) {
+  return fmt::format("HookInfo {{ target: 0x{:x}, hook_ptr: 0x{:x}, name: {}, namespace: {} }}", (uintptr_t)hook.target,
+                     (uintptr_t)hook.hook_ptr, hook.metadata.name_info.name, hook.metadata.name_info.namespaze);
+}
+
+
 }  // namespace flamingo

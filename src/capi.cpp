@@ -1,6 +1,10 @@
 #include "capi.h"
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <optional>
+#include <string>
 #include <utility>
 #include <variant>
 #include "calling-convention.hpp"
@@ -98,21 +102,37 @@ FlamingoUninstallResult convert_uninstall_result(flamingo::Result<bool, bool> co
 FLAMINGO_C_EXPORT FlamingoNameInfo* flamingo_make_name(char const* name_str) {
   return reinterpret_cast<FlamingoNameInfo*>(new flamingo::HookNameMetadata{ .name = name_str });
 }
+FLAMINGO_C_EXPORT FlamingoNameInfo* flamingo_make_name_namespaced(char const* namespaze_str, char const* name_str) {
+  return reinterpret_cast<FlamingoNameInfo*>(new flamingo::HookNameMetadata{ .name = name_str, .namespaze = namespaze_str });
+}
 
-FLAMINGO_C_EXPORT FlamingoHookPriority* flamingo_make_priority(FlamingoNameInfo** before_names, size_t num_befores,
-                                                               FlamingoNameInfo** after_names, size_t num_afters, bool is_final) {
+
+FLAMINGO_C_EXPORT FlamingoHookFilter* flamingo_make_filter(char const* namespaze_str, char const* name_str){
+
+  auto* result = new flamingo::HookNameFilter();
+  if (namespaze_str != nullptr) {
+    result->namespaze = namespaze_str;
+  }
+  if (name_str != nullptr) {
+    result->name = name_str;
+  }
+  return reinterpret_cast<FlamingoHookFilter*>(result);
+}
+
+FLAMINGO_C_EXPORT FlamingoHookPriority* flamingo_make_priority(FlamingoHookFilter** before_names, size_t num_befores,
+                                                               FlamingoHookFilter** after_names, size_t num_afters, bool is_final) {
   // Iterate the befores and afters, consume their pointers to make new instances for the before set
   auto result = new flamingo::HookPriority();
   result->befores.resize(num_befores);
   for (size_t i = 0; i < num_befores; i++) {
-    auto value = reinterpret_cast<flamingo::HookNameMetadata*>(before_names[i]);
-    new (&result->befores[i]) flamingo::HookNameMetadata(*value);
+    auto value = reinterpret_cast<flamingo::HookNameFilter*>(before_names[i]);
+    new (&result->befores[i]) flamingo::HookNameFilter(*value);
     delete value;
   }
   result->afters.resize(num_afters);
   for (size_t i = 0; i < num_afters; i++) {
-    auto value = reinterpret_cast<flamingo::HookNameMetadata*>(after_names[i]);
-    new (&result->afters[i]) flamingo::HookNameMetadata(*value);
+    auto value = reinterpret_cast<flamingo::HookNameFilter*>(after_names[i]);
+    new (&result->afters[i]) flamingo::HookNameFilter(*value);
     delete value;
   }
   result->is_final = is_final;
@@ -244,4 +264,113 @@ FLAMINGO_C_EXPORT_VOID void flamingo_format_error(FlamingoInstallErrorData* erro
   auto [out, _] = fmt::format_to_n(buffer, buffer_size - 1, "{}", *install_error);
   *out = '\0';  // Suffix with a null
   delete install_error;
+}
+
+FLAMINGO_C_EXPORT size_t flamingo_get_hook_count(uint32_t* target) {
+  auto res = flamingo::TargetDataFor(flamingo::TargetDescriptor{ .target = target });
+  if (!res.has_value()) return 0;
+  return res.value().hooks.size();
+}
+
+FLAMINGO_C_EXPORT size_t flamingo_get_hooks(uint32_t* target, FlamingoHookInfo* hooks, size_t capacity) {
+  auto res = flamingo::TargetDataFor(flamingo::TargetDescriptor{ .target = target });
+  if (!res.has_value()) return 0;
+  if (hooks == nullptr) return 0;
+
+  auto const& hook_list = res.value().hooks;
+  size_t to_copy = std::min(capacity, hook_list.size());
+
+  auto it = hook_list.begin();
+  for (size_t i = 0; i < to_copy; i++) {
+    auto& dest = hooks[i];
+    dest.hook_ptr = it->hook_ptr;
+    dest.orig_ptr = it->orig_ptr;
+    // Copy name
+    if (it->metadata.name_info.name.empty()) {
+      dest.name = nullptr;
+    } else {
+      dest.name = static_cast<char*>(std::malloc(it->metadata.name_info.name.size() + 1));
+      std::strcpy(dest.name, it->metadata.name_info.name.c_str());
+    }
+    // Copy namespaze
+    if (it->metadata.name_info.namespaze.empty()) {
+      dest.namespaze = nullptr;
+    } else {
+      dest.namespaze = static_cast<char*>(std::malloc(it->metadata.name_info.namespaze.size() + 1));
+      std::strcpy(dest.namespaze, it->metadata.name_info.namespaze.c_str());
+    }
+    ++it;
+  }
+
+  return to_copy;
+}
+
+// Provide a single allocation-style filtered query and a matching free function below.
+
+FLAMINGO_C_EXPORT FlamingoHookInfo* flamingo_get_hooks_filtered(FlamingoHookFilter* filter, void* target,
+                                                                size_t* out_count) {
+  std::optional<flamingo::HookNameFilter> opt_filter = std::nullopt;
+  if (filter != nullptr) {
+    auto const& f = *reinterpret_cast<flamingo::HookNameFilter*>(filter);
+    opt_filter = flamingo::HookNameFilter{ f };
+  }
+  std::optional<flamingo::TargetDescriptor> td = std::nullopt;
+  if (target != nullptr) {
+    td = flamingo::TargetDescriptor{ .target = target };
+  }
+
+  auto v = flamingo::Hooks(opt_filter, td);
+  size_t count = v.size();
+  if (out_count != nullptr) *out_count = count;
+  if (count == 0) {
+    return nullptr;
+  }
+
+  auto* arr = static_cast<FlamingoHookInfo*>(std::malloc(sizeof(FlamingoHookInfo) * count));
+
+  // populate
+  for (size_t i = 0; i < count; ++i) {
+    auto const& orig = v[i];
+    auto& c = arr[i];
+
+    c.hook_ptr = orig.hook_ptr;
+    c.orig_ptr = orig.orig_ptr;
+    if (orig.metadata.name_info.name.empty()) {
+      c.name = nullptr;
+    } else {
+      c.name = static_cast<char*>(std::malloc(orig.metadata.name_info.name.size() + 1));
+      std::strcpy(c.name, orig.metadata.name_info.name.c_str());
+    }
+    if (orig.metadata.name_info.namespaze.empty()) {
+      c.namespaze = nullptr;
+    } else {
+      c.namespaze = static_cast<char*>(std::malloc(orig.metadata.name_info.namespaze.size() + 1));
+      std::strcpy(c.namespaze, orig.metadata.name_info.namespaze.c_str());
+    }
+  }
+  return arr;
+}
+
+FLAMINGO_C_EXPORT_VOID void flamingo_free_hooks_info_array(FlamingoHookInfo* hooks, size_t length) {
+  if (hooks == nullptr) return;
+  for (size_t i = 0; i < length; ++i) {
+    if (hooks[i].name != nullptr) std::free(hooks[i].name);
+    if (hooks[i].namespaze != nullptr) std::free(hooks[i].namespaze);
+  }
+  std::free(hooks);
+}
+
+FLAMINGO_C_EXPORT_VOID void flamingo_free_hooks_array(FlamingoHookInfo* hooks, size_t length) {
+  if (hooks == nullptr) return;
+
+  // free hooks name and namespaze
+  for (size_t i = 0; i < length; i++) {
+    auto& hook_info = hooks[i];
+    if (hook_info.name != nullptr) {
+      std::free(hook_info.name);
+    }
+    if (hook_info.namespaze != nullptr) {
+      std::free(hook_info.namespaze);
+    }
+  }
 }

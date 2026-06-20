@@ -82,6 +82,9 @@ typedef enum {
 /// @brief Opaque pointer around a flamingo::HookNameMetadata
 typedef struct FlamingoNameInfo FlamingoNameInfo;
 
+/// @brief Opaque pointer around a flamingo::HookNameFilter
+typedef struct FlamingoHookFilter FlamingoHookFilter;
+
 /// @brief Opaque pointer around a flamingo::HookPriority
 typedef struct FlamingoHookPriority FlamingoHookPriority;
 
@@ -90,6 +93,17 @@ typedef struct FlamingoInstallationMetadata FlamingoInstallationMetadata;
 
 /// @brief Opaque pointer around a flamingo::TypeInfo
 typedef struct FlamingoTypeInfo FlamingoTypeInfo;
+
+/// @brief C representation of a hook entry returned by query APIs.
+/// Fields owning strings (`name` and `namespaze`) are allocated by the API
+/// and must be freed with `flamingo_free_hooks_array` (pass the `hooks` array
+/// and the number of elements to free).
+typedef struct {
+  void* hook_ptr;    ///< Pointer to the hook function
+  void* orig_ptr;    ///< Pointer to the original/trampoline function or NULL
+  char* name;        ///< Nullable, malloc'd C string for the hook's name
+  char* namespaze;   ///< Nullable, malloc'd C string for the hook's namespace
+} FlamingoHookInfo;
 
 /// @brief Returned from a call to query if a region is hooked, and what the original instructions at that location are.
 /// Should not be stored for long-term use, since the lifetime of the result is tied to the lifetime of the hooks at
@@ -105,20 +119,39 @@ typedef struct {
 } FlamingoOriginalInstructionsResult;
 
 /// @brief Creates a flamingo::HookNameMetadata from the provided parameters. The return is an opaque pointer.
+/// @param name_str Nullable, C string for the hook's name (may be NULL or empty for no name).
+/// @return An opaque pointer to a FlamingoNameInfo. The returned pointer's lifetime is until it is consumed by a call
+/// to flamingo_install_hook*, flamingo_make_priority, or any API that takes ownership of FlamingoNameInfo*.
 /// The returned pointer's lifetime is until a different flamingo API call is made that CONSUMES the FlamingoNameInfo*.
-/// This is primarily used to give hooks names and to describe priorities for installation.
+/// This is primarily used to give hooks names for installation.
 /// The lifetime of the result is until it is consumed by a call to flamingo_install_hook*, or flamingo_make_priority.
 FLAMINGO_C_EXPORT FlamingoNameInfo* flamingo_make_name(char const* name_str);
 
+/// @brief Creates a flamingo::HookNameMetadata from the provided parameters. The return is an opaque pointer.
+/// @param namespaze_str Nullable, C string for the hook's namespace (may be NULL or empty for no namespace).
+/// @param name_str Nullable, C string for the hook's name (may be NULL or empty for no name).
+/// @return An opaque pointer to a FlamingoNameInfo. The returned pointer's lifetime is until it is consumed by a call
+/// The returned pointer's lifetime is until a different flamingo API call is made that CONSUMES the FlamingoNameInfo*.
+/// This is primarily used to give hooks names for installation.
+/// The lifetime of the result is until it is consumed by a call to flamingo_install_hook*, or flamingo_make_priority.
+FLAMINGO_C_EXPORT FlamingoNameInfo* flamingo_make_name_namespaced(char const* namespaze_str, char const* name_str);
+
+/// @brief Creates a flamingo::HookNameFilter from the provided namespace and name strings.
+/// @param namespaze_str Nullable, C string for the filter's namespace (may be NULL or empty for no namespace filter). Allows matching any namespace if null or empty.
+/// @param name_str Nullable, C string for the filter's name (may be NULL or empty for no name filter). Allows matching any name if null or empty.
+/// @return An opaque pointer to a FlamingoHookFilter. The returned pointer's lifetime is until it is consumed by a call to
+/// flamingo_make_priority or any API that takes ownership of FlamingoHookFilter*. This is primarily used to describe priorities for installation.
+FLAMINGO_C_EXPORT FlamingoHookFilter* flamingo_make_filter(char const* namespaze_str, char const* name_str);
+
 /// @brief Creates a flamingo::HookMetadata from the provided parameters.
-/// The parameters are arrays of FlamingoNameInfo that must be dereferencable up to num_befores and num_afters
+/// The parameters are arrays of FlamingoHookFilter that must be dereferencable up to num_befores and num_afters
 /// respectively. The parameters are CONSUMED, that is, the pointers are no longer valid after this API call. This is
 /// used to give hooks priority information in flamingo_install_hook_full*
 /// @param is_final Whether this hook should be the final hook (closest to the original function). This takes precedence
 /// over all other priorities.
 /// The lifetime of the result is until it is consumed by a call to flamingo_install_hook*.
-FLAMINGO_C_EXPORT FlamingoHookPriority* flamingo_make_priority(FlamingoNameInfo** before_names, size_t num_befores,
-                                                               FlamingoNameInfo** after_names, size_t num_afters,
+FLAMINGO_C_EXPORT FlamingoHookPriority* flamingo_make_priority(FlamingoHookFilter** before_names, size_t num_befores,
+                                                               FlamingoHookFilter** after_names, size_t num_afters,
                                                                bool is_final);
 
 /// @brief Creates a flamingo::InstallationMetadata from the provided parameters.
@@ -248,6 +281,32 @@ FLAMINGO_C_EXPORT FlamingoUninstallResult flamingo_uninstall_hook(FlamingoHookHa
 /// @brief Given an installation error, formats a human-readable error message and writes it to the provided string, not
 /// exceeding the size provided.
 FLAMINGO_C_EXPORT_VOID void flamingo_format_error(FlamingoInstallErrorData* error, char* buffer, size_t buffer_size);
+
+/// @brief Returns the number of hooks installed at `target`. Returns 0 if none or if target is not hooked.
+FLAMINGO_C_EXPORT size_t flamingo_get_hook_count(uint32_t* target);
+
+/// @brief Fills the provided `hooks` array with `FlamingoHookInfo` entries for `target`.
+/// If `capacity` is smaller than the number of hooks, the function writes up to `capacity` elements and
+/// returns the number of elements written (i.e. the number of `FlamingoHookInfo` structures populated).
+/// The `name` and `namespaze` fields inside each written `FlamingoHookInfo` are allocated with `malloc`.
+/// To free those strings, call `flamingo_free_hooks_array` passing the same `hooks` pointer and the length
+/// equal to the number of entries written (the function's return value).
+FLAMINGO_C_EXPORT size_t flamingo_get_hooks(uint32_t* target, FlamingoHookInfo* hooks, size_t capacity);
+
+/// @brief Frees the `name` and `namespaze` strings inside an array of `FlamingoHookInfo` returned
+/// by `flamingo_get_hooks`. Does NOT free the `hooks` array itself; the caller is responsible for that.
+FLAMINGO_C_EXPORT_VOID void flamingo_free_hooks_array(FlamingoHookInfo* hooks, size_t length);
+
+/// @brief Allocates and returns an array of `FlamingoHookInfo` matching `filter` and `target`.
+/// If `filter` is NULL, no name/namespace filtering is applied. If `target` is NULL, hooks across all targets
+/// are considered.
+/// The returned pointer is malloc'd and must be freed with `flamingo_free_hooks_info_array`.
+/// The actual number of entries is written to `out_count` (may be NULL if caller doesn't need it).
+FLAMINGO_C_EXPORT FlamingoHookInfo* flamingo_get_hooks_filtered(FlamingoHookFilter* filter,
+                                                               void* target, size_t* out_count);
+
+/// @brief Frees an array returned by `flamingo_get_hooks_filtered`, including per-entry strings.
+FLAMINGO_C_EXPORT_VOID void flamingo_free_hooks_info_array(FlamingoHookInfo* hooks, size_t length);
 
 #ifdef __cplusplus
 }

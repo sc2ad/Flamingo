@@ -3,6 +3,9 @@
 #include <cstdint>
 #include <list>
 #include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "fixups.hpp"
 #include "hook-data.hpp"
@@ -37,6 +40,14 @@ struct TargetData {
   TargetMetadata metadata;
   Fixups fixups;
   std::list<HookInfo> hooks{};
+  struct GraphNode {
+    // represents the hook's iterator in the TargetData::hooks
+    std::list<HookInfo>::iterator hook_it;
+    // adjacency list of nodes that should come after this node (edges: this -> after)
+    std::vector<HookNameMetadata> afters;
+  };
+
+  std::unordered_map<HookNameMetadata, GraphNode> priority_graph;
 };
 
 /// @brief A handle to an installed hook. Used for uninstalls.

@@ -34,6 +34,7 @@
 #define FLAMINGO_ASSERT(...) __builtin_assume(__VA_ARGS__)
 #endif
 
+#define FLAMINGO_WARN(...) LOGA(ANDROID_LOG_WARN, __VA_ARGS__)
 #define FLAMINGO_CRITICAL(...) LOGA(ANDROID_LOG_FATAL, __VA_ARGS__)
 #define FLAMINGO_ABORT(...)         \
   do {                              \
@@ -59,6 +60,7 @@
 #define FLAMINGO_DEBUG(...)
 #endif
 
+#define FLAMINGO_WARN(...) Paper::Logger::fmtLog<Paper::LogLevel::WARN>(__VA_ARGS__)
 #define FLAMINGO_CRITICAL(...) Paper::Logger::fmtLog<Paper::LogLevel::CRIT>(__VA_ARGS__)
 #define FLAMINGO_ABORT(...)         \
   do {                              \
@@ -77,6 +79,9 @@
   puts("")
 #define FLAMINGO_CRITICAL(...) \
   fmt::print(__VA_ARGS__);     \
+  puts("")
+#define FLAMINGO_WARN(...) \
+  fmt::print(__VA_ARGS__); \
   puts("")
 #define FLAMINGO_ABORT(...) \
   fmt::print(__VA_ARGS__);  \
