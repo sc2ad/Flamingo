@@ -1,10 +1,11 @@
 #pragma once
-#include <fmt/compile.h>
 #include <cstddef>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
+
+#include <fmt/compile.h>
 
 #include "calling-convention.hpp"
 #include "hook-metadata.hpp"

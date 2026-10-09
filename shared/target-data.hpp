@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <list>
-#include <optional>
 
 #include "fixups.hpp"
 #include "hook-data.hpp"

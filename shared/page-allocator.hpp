@@ -1,9 +1,12 @@
 #pragma once
-#include <fmt/format.h>
+
 #include <sys/mman.h>
 #include <algorithm>
 #include <cstdint>
 #include <span>
+
+#include <fmt/format.h>
+
 #include "util.hpp"
 
 namespace flamingo {

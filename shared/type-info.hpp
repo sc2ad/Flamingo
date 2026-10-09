@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <type_traits>
+
 #include <fmt/format.h>
 #include <fmt/compile.h>
 
